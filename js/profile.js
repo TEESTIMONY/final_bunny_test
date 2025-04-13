@@ -863,7 +863,7 @@ async function displayReferralSection(userData) {
     // Populate referral link container
     const referralLinkContainer = referralSection.querySelector('.referral-link-container');
     referralLinkContainer.innerHTML = `
-        <p class="referral-info">Share your unique link with friends. When they sign up, you'll both earn 500 bonus points!</p>
+        <p class="referral-info">Share your unique link with friends. When they sign up, you'll earn 500 bonus points and they'll get 200!</p>
         <div class="referral-link-group">
             <input type="text" id="referralLinkInput" value="${userData.referralLink}" readonly>
             <div class="referral-buttons">

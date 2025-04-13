@@ -227,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="notification-icon"><i class="fas fa-gift"></i></div>
                     <div class="notification-content">
                         <div class="notification-title">Referral Bonus!</div>
-                        <div class="notification-message">You were invited by ${referrerUsername}. Sign up to get 500 bonus points!</div>
+                        <div class="notification-message">You were invited by ${referrerUsername}. Sign up to get 200 bonus points!</div>
                     </div>
                     <div class="notification-close"><i class="fas fa-times"></i></div>
                 `;
