@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
                            window.location.hostname === "localhost";
     
     // API URLs - Using the new backend URL
-    const API_BASE_URL = 'https://new-backend-hop.vercel.app';
+    const API_BASE_URL = 'https://final-backend-test.vercel.app';
     const REGISTER_URL = `${API_BASE_URL}/api/auth/register`;
     const LOGIN_URL = `${API_BASE_URL}/api/auth/login`;
 
@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log(`Referral registered: ${username} was referred by ${hasUsername ? referrerUsername : 'ID ' + referrerId}`);
                     
                     // Make the update-score API call to add points to both users
-                    const updateScoreUrl = 'https://new-backend-hop.vercel.app/api/update-score';
+                    const updateScoreUrl = 'https://final-backend-test.vercel.app/api/update-score';
                     
                     // Add a unique request identifier to prevent duplicate processing
                     const uniqueRequestId = `reg_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;

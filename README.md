@@ -41,7 +41,7 @@ To avoid CORS errors during development, you need to run the backend locally:
    npm run deploy
    ```
 
-2. Update the `API_BASE_URL` in `js/auth.js` with your deployed API URL (currently set to `https://new-backend-hop.vercel.app`)
+2. Update the `API_BASE_URL` in `js/auth.js` with your deployed API URL (currently set to `https://final-backend-test.vercel.app`)
 
 3. Deploy the frontend to your preferred hosting provider
 
@@ -50,7 +50,7 @@ To avoid CORS errors during development, you need to run the backend locally:
 If you encounter CORS errors:
 
 1. Ensure the backend is running locally during development
-2. Check that the `API_BASE_URL` in `js/auth.js` is set correctly (should be `https://new-backend-hop.vercel.app`)
+2. Check that the `API_BASE_URL` in `js/auth.js` is set correctly (should be `https://final-backend-test.vercel.app`)
 3. Make sure your backend has proper CORS headers configured
 
 ## Game Features

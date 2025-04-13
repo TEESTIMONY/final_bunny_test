@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth, db } = require('../config/firebase');
+const axios = require('axios');
 
 /**
  * @route POST /api/auth/register
@@ -152,38 +153,58 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Please provide email and password' });
     }
 
-    // Try to find the user by email
-    const userRecord = await auth.getUserByEmail(email);
-
-    // Since Firebase Admin SDK doesn't have a native way to verify passwords,
-    // we'll just create a token based on the found user
-    // In a real implementation, you should use Firebase Client SDK on frontend
-    // for proper authentication with password
-    
-    const token = await auth.createCustomToken(userRecord.uid);
-    
-    // Get user data from Firestore
-    const userDoc = await db.collection('users').doc(userRecord.uid).get();
-    const userData = userDoc.data();
-
-    res.status(200).json({
-      message: 'Login successful',
-      token,
-      userId: userRecord.uid,
-      score: userData?.score || 0,
-      highScore: userData?.highScore || 0,
-      referralCount: userData?.referralCount || 0,
-      referralBonus: userData?.referralBonus || 0,
-      user: {
-        uid: userRecord.uid,
-        email: userRecord.email,
-        displayName: userRecord.displayName || userData?.username,
-        highScore: userData?.highScore || 0,
-        score: userData?.score || 0,
-        referralCount: userData?.referralCount || 0,
-        referralBonus: userData?.referralBonus || 0
+    // Use Firebase REST API to authenticate with email and password
+    try {
+      // Get Firebase API Key from environment variable
+      const apiKey = process.env.FIREBASE_API_KEY;
+      
+      if (!apiKey) {
+        throw new Error('Firebase API key is not configured');
       }
-    });
+      
+      // Call Firebase Auth REST API
+      const response = await axios.post(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+        {
+          email,
+          password,
+          returnSecureToken: true
+        }
+      );
+      
+      const userData = response.data;
+      const uid = userData.localId;
+      
+      // Get user data from Firestore
+      const userDoc = await db.collection('users').doc(uid).get();
+      const userRecord = await auth.getUser(uid);
+      const firestoreData = userDoc.data() || {};
+      
+      // Create a custom token for the client
+      const token = await auth.createCustomToken(uid);
+      
+      res.status(200).json({
+        message: 'Login successful',
+        token,
+        userId: uid,
+        score: firestoreData?.score || 0,
+        highScore: firestoreData?.highScore || 0,
+        referralCount: firestoreData?.referralCount || 0,
+        referralBonus: firestoreData?.referralBonus || 0,
+        user: {
+          uid: uid,
+          email: userRecord.email,
+          displayName: userRecord.displayName || firestoreData?.username,
+          highScore: firestoreData?.highScore || 0,
+          score: firestoreData?.score || 0,
+          referralCount: firestoreData?.referralCount || 0,
+          referralBonus: firestoreData?.referralBonus || 0
+        }
+      });
+    } catch (authError) {
+      console.error('Firebase authentication error:', authError.response?.data || authError);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
   } catch (error) {
     console.error('Error logging in:', error);
     
