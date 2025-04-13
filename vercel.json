@@ -6,7 +6,7 @@
     {
       "source": "/",
       "destination": "/auth.html",
-      "permanent": true
+      "permanent": false
     }
   ],
   "rewrites": [
