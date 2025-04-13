@@ -15,25 +15,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="assets/logo.png">
-    <script>
-        // Check if user has token (is authenticated) - if not, redirect to auth.html
-        function checkAuth() {
-            // Check if user is logged in via localStorage or sessionStorage
-            const hasToken = localStorage.getItem('token') || sessionStorage.getItem('token');
-            
-            // If not logged in, redirect to auth.html
-            if (!hasToken) {
-                window.location.href = 'auth.html';
-            }
-        }
-        
-        // Run auth check on page load
-        window.onload = checkAuth;
-    </script>
 </head>
 <body>
     <div class="game-container">
         <canvas id="gameCanvas"></canvas>
+        
+        <!-- <div id="score">0</div> -->
         
         <!-- Start screen - shown after authentication -->
         <div id="startScreen" class="overlay">
@@ -111,6 +98,7 @@
                 </button>
             </div>
         </div>
+        
     </div>
 
     <!-- Game scripts -->
