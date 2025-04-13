@@ -1,0 +1,223 @@
+/* Dashboard Styles */
+body {
+    font-size: .875rem;
+    background-color: #f8f9fa;
+    overflow-x: hidden;
+}
+
+/* Login screen */
+.auth-welcome {
+    text-align: center;
+    padding: 40px 0;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.login-image {
+    max-width: 150px;
+    margin-bottom: 30px;
+}
+
+/* Auth message with icon */
+#authMessage {
+    position: relative;
+    padding-left: 50px;
+}
+
+#authMessage::before {
+    font-family: 'bootstrap-icons';
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+}
+
+#authMessage.alert-info::before {
+    content: '\F431'; /* info icon */
+}
+
+#authMessage.alert-success::before {
+    content: '\F26B'; /* check icon */
+}
+
+#authMessage.alert-danger::before {
+    content: '\F623'; /* exclamation icon */
+}
+
+#authMessage.alert-warning::before {
+    content: '\F33A'; /* warning icon */
+}
+
+/* Sidebar */
+.sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+    padding: 48px 0 0;
+    box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+    height: 100vh;
+}
+
+.sidebar .nav-link {
+    padding: .5rem 1rem;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    transition: all 0.3s;
+}
+
+.sidebar .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Main Content */
+main {
+    padding-top: 1.5rem;
+}
+
+/* Table styling */
+.table-responsive {
+    min-height: 400px;
+    overflow-x: auto;
+}
+
+/* User Detail Styling */
+.user-detail-card {
+    border-left: 4px solid #007bff;
+    background-color: #f8f9fa;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+/* Stats Display */
+.stat-card {
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    border-left: 4px solid #007bff;
+    margin-bottom: 20px;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #007bff;
+    margin-bottom: 5px;
+}
+
+.stat-title {
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+/* Login Form */
+#loginForm {
+    max-width: 500px;
+    margin: 0 auto;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Pagination controls */
+.pagination-container {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* Loading state */
+.loading-row td {
+    padding: 40px 0 !important;
+}
+
+/* Media Queries */
+@media (max-width: 767.98px) {
+    .sidebar {
+        position: static;
+        height: auto;
+        padding-top: 0;
+        box-shadow: none;
+    }
+    
+    main {
+        margin-top: 20px;
+    }
+    
+    /* Improve table display on mobile */
+    .table-responsive table {
+        display: block;
+        width: 100%;
+    }
+    
+    .table-responsive thead {
+        display: none; /* Hide table headers on small screens */
+    }
+    
+    .table-responsive tbody tr {
+        display: block;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        padding: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Exception for loading and empty state rows */
+    .table-responsive tbody tr.loading-row,
+    .table-responsive tbody tr:only-child {
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .table-responsive tbody tr.loading-row td,
+    .table-responsive tbody tr:only-child td {
+        display: block;
+        text-align: center;
+        padding: 20px 10px;
+    }
+    
+    .table-responsive tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 10px;
+        border: none;
+    }
+    
+    /* Hide the # column on mobile */
+    .table-responsive tbody td:first-child {
+        display: none;
+    }
+    
+    /* Add data labels for mobile */
+    .table-responsive tbody td:nth-child(2)::before { content: "Username: "; font-weight: bold; }
+    .table-responsive tbody td:nth-child(3)::before { content: "Email: "; font-weight: bold; }
+    .table-responsive tbody td:nth-child(4)::before { content: "High Score: "; font-weight: bold; }
+    .table-responsive tbody td:nth-child(5)::before { content: "Games Played: "; font-weight: bold; }
+    .table-responsive tbody td:nth-child(6)::before { content: "Created At: "; font-weight: bold; }
+    .table-responsive tbody td:nth-child(7) { justify-content: center; }
+    
+    /* Fix pagination on small screens */
+    .d-flex.justify-content-between.align-items-center.mt-4 {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .d-flex.justify-content-between.align-items-center.mt-4 > div {
+        width: 100%;
+        text-align: center;
+    }
+    
+    /* Login form adjustments */
+    #loginForm {
+        max-width: 100%;
+    }
+}
+
+} 

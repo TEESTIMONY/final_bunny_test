@@ -1,0 +1,2075 @@
+:root {
+    --vh: 1vh;
+    --pepe-green: #4B5320;
+    --pepe-dark-green: #2F3816;
+    --bunny-blue: #39547B;
+    --bunny-dark-blue: #263a57;
+    --umbrella-red: #8B3A3A;
+    --umbrella-dark-red: #5e2727;
+    --grass-green: #71A744;
+    --sky-blue: #87CEEB;
+    
+    /* New modern UI colors */
+    --ui-primary: #2C3E50;
+    --ui-secondary: #34495E;
+    --ui-accent: #E74C3C;
+    --ui-light: #ECF0F1;
+    --ui-dark: #1A2530;
+    --ui-gold: #F1C40F;
+    --ui-success: #2ECC71;
+    --ui-info: #3498DB;
+    
+    /* Glass morphism variables */
+    --glass-bg: rgba(255, 255, 255, 0.15);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    --glass-blur: 10px;
+    
+    /* Safari viewport insets */
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 15px);
+}
+
+/* Apply modern font and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+body {
+    background: var(--ui-dark);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    color: var(--ui-light);
+    background: linear-gradient(135deg, var(--pepe-dark-green), var(--bunny-dark-blue));
+}
+
+.game-container {
+    position: relative;
+    width: 400px;
+    height: 100vh; /* Full viewport height */
+    max-height: 100vh;
+    border: none;
+    border-radius: 25px;
+    overflow: hidden;
+    box-shadow: 
+        0 15px 30px rgba(0, 0, 0, 0.4), 
+        0 5px 15px rgba(0, 0, 0, 0.3), 
+        0 0 100px rgba(113, 167, 68, 0.15);
+    background-color: var(--ui-dark);
+    
+    /* Advanced outline glow */
+    --outline-size: 1px;
+    --outline-color: rgba(255, 255, 255, 0.1);
+    outline: var(--outline-size) solid var(--outline-color);
+    
+    /* Responsive sizing */
+    max-width: 95vw;
+    
+    /* Animation */
+    animation: container-float 6s ease-in-out infinite;
+}
+
+/* Safari-specific fixes for viewport issues */
+@supports (-webkit-touch-callout: none) {
+    .game-container {
+        /* iOS-specific height fix */
+        height: -webkit-fill-available;
+        /* Add safe area padding */
+        padding-top: var(--safe-area-inset-top);
+        padding-bottom: var(--safe-area-inset-bottom);
+    }
+    
+    /* Fix button placement at bottom of screen */
+    .button-container {
+        padding-bottom: calc(100px + var(--safe-area-inset-bottom));
+        margin-bottom: 30px;
+    }
+    
+    /* Fix actions row in profile page */
+    .actions-row {
+        padding-bottom: calc(100px + var(--safe-area-inset-bottom));
+        margin-bottom: 50px;
+    }
+    
+    /* Adjust overlay screens for Safari */
+    .overlay {
+        padding-top: calc(20px + var(--safe-area-inset-top));
+        padding-bottom: calc(30px + var(--safe-area-inset-bottom));
+    }
+    
+    /* Fix for auth form buttons in Safari */
+    .auth-form {
+        margin-bottom: calc(15px + var(--safe-area-inset-bottom));
+        padding-bottom: 55px;
+    }
+    
+    .auth-form .game-button {
+        margin-bottom: calc(10px + var(--safe-area-inset-bottom));
+    }
+    
+    /* Fix for footer text in Safari */
+    .footer-text {
+        margin-bottom: calc(5px + var(--safe-area-inset-bottom));
+        padding-bottom: 10px;
+    }
+}
+
+@keyframes container-float {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-5px) scale(1.005); }
+}
+
+#gameCanvas {
+    background: linear-gradient(to bottom, var(--sky-blue), var(--bunny-blue));
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Modern score display with glass morphism */
+#score {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 36px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    padding: 10px 20px;
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+    z-index: 20;
+}
+
+#score.score-pulse {
+    animation: scorePulse 0.5s ease-in-out;
+    color: gold;
+    text-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+}
+
+@keyframes scorePulse {
+    0% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(1.2); }
+    100% { transform: translateX(-50%) scale(1); }
+}
+
+#score:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+#score::before {
+    content: 'SCORE';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: normal;
+    background: var(--ui-accent);
+    padding: 2px 10px;
+    border-radius: 8px;
+    letter-spacing: 2px;
+    box-shadow: 0 3px 10px rgba(231, 76, 60, 0.3);
+    animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.9; transform: translateX(-50%) scale(1); }
+    50% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+}
+
+/* Modern description card */
+.game-description {
+    font-size: 16px;
+    max-width: 90%;
+    text-align: center;
+    line-height: 1.4;
+    margin-bottom: 10px;
+    color: var(--ui-light);
+    background: var(--glass-bg);
+    padding: 15px 20px;
+    border-radius: 16px;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    transform: translateZ(0);
+    transition: all 0.3s ease;
+}
+
+.game-description:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Game over screen with advanced styling */
+#gameOver h2 {
+    font-size: 54px;
+    margin-bottom: 25px;
+    color: var(--ui-accent);
+    text-shadow: 
+        0 2px 0 var(--umbrella-dark-red),
+        0 4px 0 var(--umbrella-dark-red),
+        0 6px 10px rgba(0, 0, 0, 0.8);
+    letter-spacing: 3px;
+    animation: gameOverPulse 2.5s infinite alternate ease-in-out;
+    transform-origin: center;
+}
+
+@keyframes gameOverPulse {
+    0% { transform: scale(1); text-shadow: 0 2px 0 var(--umbrella-dark-red), 0 4px 0 var(--umbrella-dark-red), 0 6px 10px rgba(0, 0, 0, 0.8); }
+    100% { transform: scale(1.05); text-shadow: 0 2px 0 var(--umbrella-dark-red), 0 4px 0 var(--umbrella-dark-red), 0 6px 15px rgba(231, 76, 60, 0.8), 0 0 20px rgba(231, 76, 60, 0.4); }
+}
+
+/* Glass morphism score display */
+.score-display {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    background: var(--glass-bg);
+    padding: 25px 35px;
+    border-radius: 20px;
+    margin-bottom: 35px;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    min-width: 85%;
+    max-width: 280px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.score-display::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        to bottom right,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0.05) 40%,
+        rgba(255, 255, 255, 0) 50%
+    );
+    transform: rotate(30deg);
+    pointer-events: none;
+}
+
+.score-display:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+}
+
+.score-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    position: relative;
+    padding: 5px 0;
+}
+
+.score-item:first-child::after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.5), transparent);
+}
+
+.score-label {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 400;
+    letter-spacing: 1px;
+}
+
+.score-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--ui-gold);
+    text-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
+}
+
+#finalScore {
+    font-size: 32px;
+    animation: scoreCountAnimation 1.5s cubic-bezier(0.17, 0.67, 0.21, 1.69);
+    background: linear-gradient(to right, #F1C40F, #F39C12);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-fill-color: transparent;
+}
+
+@keyframes scoreCountAnimation {
+    0% { opacity: 0; transform: scale(0.5); filter: blur(10px); }
+    70% { transform: scale(1.2); filter: blur(0); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* Modern button with advanced hover effects */
+.game-button {
+    background: linear-gradient(to bottom, var(--ui-accent), #C0392B);
+    color: white;
+    border: none;
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 50px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 
+        0 6px 0 var(--umbrella-dark-red),
+        0 10px 25px rgba(0, 0, 0, 0.3);
+    outline: none;
+    z-index: 1;
+}
+
+/* Logout button as a game button */
+.logout-game-button {
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    box-shadow: 
+        0 6px 0 #1a5276,
+        0 10px 25px rgba(0, 0, 0, 0.3);
+    font-size: 16px;
+    padding: 14px 28px;
+    margin-top: 15px;
+    width: auto; /* Allow button to size properly */
+    min-width: 200px; /* Ensure minimum width */
+}
+
+.logout-game-button:hover {
+    background: linear-gradient(to bottom, #2980b9, #3498db);
+    box-shadow: 
+        0 9px 0 #1a5276,
+        0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+.logout-game-button:active {
+    transform: translateY(3px);
+    box-shadow: 
+        0 3px 0 #1a5276,
+        0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.game-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        to right,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+    );
+    transition: all 0.5s ease;
+    z-index: -1;
+}
+
+.game-button:hover {
+    transform: translateY(-3px);
+    box-shadow: 
+        0 9px 0 var(--umbrella-dark-red),
+        0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+.game-button:hover::before {
+    left: 100%;
+}
+
+.game-button:active {
+    transform: translateY(3px);
+    box-shadow: 
+        0 3px 0 var(--umbrella-dark-red),
+        0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Special active state specifically for mobile */
+.game-button.active-touch {
+    transform: translateY(3px);
+    box-shadow: 
+        0 3px 0 var(--umbrella-dark-red),
+        0 5px 10px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(to bottom, #C0392B, #E74C3C);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.footer-text {
+    position: absolute;
+    bottom: 25px;
+    right: 15px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    text-align: right;
+    z-index: 3;
+    padding: 5px 0;
+    pointer-events: none;
+}
+
+.footer-text:hover {
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+}
+
+.version {
+    margin-bottom: 5px;
+    font-weight: 400;
+    padding: 3px 8px;
+    background: var(--glass-bg);
+    border-radius: 10px;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+}
+
+.copyright {
+    font-size: 11px;
+}
+
+/* Mobile Responsive adjustments */
+@media (max-width: 430px) {
+    .game-container {
+        width: 100vw;
+        max-width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        aspect-ratio: unset;
+        animation: none;
+        box-shadow: none;
+    }
+    
+    body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+    }
+    
+    .game-title h1 {
+        font-size: 48px;
+    }
+    
+    .game-description {
+        font-size: 14px;
+        margin-bottom: 25px;
+        max-width: 90%;
+        padding: 15px 20px;
+    }
+    
+    #game-character {
+        width: 150px;
+        height: auto;
+    }
+    
+    .button-container {
+        margin-top: 20px;
+    }
+}
+
+/* Portrait orientation optimization - specifically target mobile phones */
+@media (max-width: 430px) and (max-height: 900px) and (orientation: portrait) {
+    .game-container {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+    
+    html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        position: fixed;
+    }
+    
+    .button-container {
+        position: relative;
+        bottom: 0;
+        margin-top: auto;
+        margin-bottom: 30px;
+    }
+    
+    .overlay {
+        justify-content: space-between;
+    }
+}
+
+/* Landscape orientation for mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    .game-container {
+        height: 100vh;
+        width: 100vw;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+    
+    .overlay {
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 10px 10px 50px 10px; /* Increased bottom padding */
+    }
+    
+    .game-title {
+        width: 50%;
+        text-align: left;
+        margin-bottom: 0;
+    }
+    
+    .game-description {
+        width: 50%;
+        margin-bottom: 0;
+    }
+    
+    .button-container {
+        width: 100%;
+        flex-direction: row;
+        justify-content: center;
+        gap: 20px;
+        margin-top: 10px;
+    }
+    
+    .actions-row {
+        flex-direction: row;
+        justify-content: center;
+        padding-bottom: 60px;
+        margin-bottom: 30px;
+    }
+    
+    .actions-row .game-button {
+        margin: 0 10px;
+    }
+    
+    #game-character {
+        width: 70px;
+        height: auto;
+        margin: 0;
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
+    }
+}
+
+/* Extra small screen devices */
+@media (max-height: 700px) {
+    .game-character {
+        width: 100px;
+        height: 200px;
+        margin-bottom: 10px;
+    }
+    
+    .game-title h1 {
+        font-size: 40px;
+    }
+    
+    .score-display {
+        margin-bottom: 20px;
+        padding: 15px 25px;
+    }
+    
+    .game-description {
+        margin-bottom: 20px;
+        line-height: 1.3;
+    }
+}
+
+/* Very small screens adjustment */
+@media (max-height: 600px) {
+    #startScreen {
+        justify-content: flex-start;
+        padding-top: 5px;
+    }
+    
+    .game-container {
+        max-height: 100vh;
+    }
+    
+    .game-character {
+        width: 70px;
+        height: auto;
+        margin-bottom: 0;
+    }
+    
+    .game-title h1 {
+        font-size: 32px;
+    }
+    
+    .game-description {
+        font-size: 12px;
+        margin-bottom: 5px;
+        line-height: 1.2;
+        padding: 8px 12px;
+        max-height: 80px;
+        overflow-y: auto;
+    }
+    
+    .game-button {
+        padding: 8px 20px;
+        font-size: 14px;
+        margin-bottom: 0;
+    }
+    
+    /* Ensure secondary button is visible */
+    .game-button.secondary-button {
+        padding: 8px 20px;
+        font-size: 14px;
+    }
+    
+    .footer-text {
+        position: static;
+        margin-top: 5px;
+        align-self: flex-end;
+    }
+    
+    .button-container {
+        margin-top: 5px;
+        padding-bottom: 10px;
+    }
+}
+
+/* Place both buttons side by side on very small screens */
+@media (max-height: 500px) {
+    #startScreen {
+        justify-content: center;
+    }
+    
+    .game-title h1 {
+        font-size: 28px;
+    }
+    
+    .button-container {
+        flex-direction: row;
+        justify-content: center;
+        gap: 10px;
+        padding-bottom: 5px;
+    }
+    
+    .game-button, 
+    .game-button.secondary-button {
+        margin: 0;
+        padding: 6px 15px;
+        font-size: 12px;
+        min-width: 120px;
+        height: auto;
+    }
+    
+    .game-description {
+        font-size: 11px;
+        padding: 5px 10px;
+        margin-bottom: 5px;
+        max-height: 60px;
+        line-height: 1.2;
+    }
+    
+    #game-character {
+        width: 60px;
+        margin: 2px auto;
+    }
+    
+    .description-icons {
+        display: none;
+    }
+}
+
+/* Extremely small height screens - ensure leaderboard is visible */
+@media (max-height: 450px) {
+    #startScreen {
+        overflow-y: auto;
+        padding: 5px;
+        justify-content: center;
+    }
+    
+    .overlay {
+        justify-content: center;
+    }
+    
+    .game-title h1 {
+        font-size: 24px;
+        margin-bottom: 2px;
+    }
+    
+    .game-title h1:last-child {
+        margin-top: -2px;
+    }
+    
+    .button-container {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: center;
+        gap: 5px;
+        padding: 0;
+        margin: 5px 0;
+    }
+    
+    .game-button,
+    .game-button.secondary-button {
+        min-width: 0;
+        width: auto;
+        padding: 5px 10px;
+        font-size: 11px;
+        margin: 0 2px;
+        box-shadow: 0 4px 5px rgba(0, 0, 0, 0.3);
+    }
+    
+    .game-description {
+        margin-bottom: 0;
+        padding: 5px 8px;
+        font-size: 10px;
+        max-height: 40px;
+    }
+    
+    #game-character {
+        width: 50px;
+        margin: 2px auto;
+    }
+    
+    .description-icons {
+        display: none;
+    }
+    
+    .footer-text {
+        position: static;
+        margin-top: 5px;
+        margin-right: 5px;
+        align-self: flex-end;
+    }
+}
+
+/* Tiny screens - minimal layout */
+@media (max-height: 400px) {
+    .game-title h1 {
+        font-size: 20px;
+    }
+    
+    .game-title h1:last-child {
+        margin-top: 0;
+    }
+    
+    .game-description {
+        padding: 3px 5px;
+        font-size: 9px;
+        max-height: 30px;
+        margin-bottom: 2px;
+    }
+    
+    #game-character {
+        width: 40px;
+        display: inline-block;
+        vertical-align: middle;
+        margin: 0 5px;
+    }
+    
+    .button-container {
+        margin: 2px 0;
+    }
+    
+    .game-button,
+    .game-button.secondary-button {
+        padding: 4px 8px;
+        font-size: 10px;
+        box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3);
+    }
+    
+    .footer-text {
+        display: none;
+    }
+    
+    /* Alternative layout for tiny screens */
+    .game-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 2px;
+    }
+}
+
+/* iPhone 5 and similar extra small devices */
+@media (max-width: 360px) and (max-height: 570px) {
+    .overlay {
+        padding: 10px;
+        justify-content: center;
+    }
+    
+    .game-title {
+        margin-bottom: 5px;
+    }
+    
+    .game-title h1 {
+        font-size: 28px;
+    }
+    
+    .game-description {
+        margin-bottom: 5px;
+        padding: 8px;
+        font-size: 11px;
+        max-height: 70px;
+    }
+    
+    .button-container {
+        flex-direction: row;
+        gap: 8px;
+        max-width: 100%;
+        margin-top: 5px;
+        padding-bottom: 5px;
+    }
+    
+    .game-button,
+    .game-button.secondary-button {
+        padding: 6px 12px;
+        font-size: 11px;
+        min-width: 0;
+        width: auto;
+    }
+    
+    .footer-text {
+        margin-top: 0;
+        font-size: 9px;
+    }
+}
+
+/* Handle touch devices */
+@media (hover: none) {
+    .game-button:hover {
+        transform: none;
+        box-shadow: 
+            0 6px 0 var(--umbrella-dark-red),
+            0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+    
+    .game-button::before {
+        display: none;
+    }
+}
+
+/* Particles animation for overlays */
+.particles-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    z-index: -1;
+}
+
+.particle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    animation: float 15s infinite linear;
+}
+
+.particle:nth-child(1) {
+    top: 10%;
+    left: 20%;
+    width: 25px;
+    height: 25px;
+    filter: blur(2px);
+    background: rgba(57, 84, 123, 0.3);
+}
+
+.particle:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    width: 15px;
+    height: 15px;
+    filter: blur(1px);
+    background: rgba(75, 83, 32, 0.4);
+}
+
+.particle:nth-child(3) {
+    top: 60%;
+    left: 10%;
+    width: 20px;
+    height: 20px;
+    filter: blur(2px);
+    background: rgba(113, 167, 68, 0.35);
+}
+
+.particle:nth-child(4) {
+    top: 70%;
+    left: 70%;
+    width: 18px;
+    height: 18px;
+    filter: blur(1.5px);
+    background: rgba(57, 84, 123, 0.3);
+}
+
+.particle:nth-child(5) {
+    top: 40%;
+    left: 40%;
+    width: 30px;
+    height: 30px;
+    filter: blur(3px);
+    background: rgba(75, 83, 32, 0.25);
+}
+
+.particle:nth-child(6) {
+    top: 80%;
+    left: 30%;
+    width: 22px;
+    height: 22px;
+    filter: blur(2px);
+    background: rgba(113, 167, 68, 0.3);
+}
+
+.particle.red {
+    background: rgba(139, 58, 58, 0.4);
+}
+
+@keyframes float {
+    0% {
+        transform: translateY(0) translateX(0) scale(1);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100vh) translateX(100px) scale(0.5);
+        opacity: 0;
+    }
+}
+
+@keyframes float-game-over {
+    0% {
+        transform: translateY(100vh) translateX(0) scale(0.5);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100vh) translateX(50px) scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Control buttons for game interface */
+.control-button {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: var(--glass-bg);
+    border-radius: 50%;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-light);
+    font-size: 18px;
+    box-shadow: var(--glass-shadow);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 5;
+}
+
+#pauseButton {
+    top: 15px;
+    left: 15px;
+}
+
+#audioButton {
+    top: 15px;
+    left: 65px;
+}
+
+.control-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.control-button:active {
+    transform: scale(0.95);
+}
+
+.control-button.active {
+    background: var(--ui-accent);
+}
+
+/* Description icons styling */
+.description-icons {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 5px;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.icon-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.icon-item:hover {
+    transform: translateY(-3px);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.icon-item i {
+    color: var(--ui-gold);
+}
+
+/* Ampersand icon animation */
+.fa-ampersand {
+    display: inline-block;
+    font-size: 0.9em;
+    color: var(--ui-gold);
+    animation: rotate-ampersand 5s infinite linear;
+    transform-origin: center;
+}
+
+@keyframes rotate-ampersand {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(10deg) scale(1.2); }
+    100% { transform: rotate(0deg) scale(1); }
+}
+
+/* Trophy and medal icons styling */
+.fa-trophy {
+    color: var(--ui-gold);
+    margin-right: 5px;
+}
+
+.fa-medal {
+    color: #C0C0C0;
+    margin-right: 5px;
+}
+
+/* Score pulse animation */
+@keyframes score-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.score-value.new-record {
+    animation: score-pulse 0.5s 3 ease-in-out;
+}
+
+/* Authentication Screen Styles */
+.auth-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    gap: 10px;
+    width: 80%;
+    max-width: 320px;
+}
+
+.auth-tab-button {
+    flex: 1;
+    padding: 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    color: var(--ui-light);
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.auth-tab-button:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.auth-tab-button.active {
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: white;
+    font-weight: 600;
+}
+
+.auth-form {
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+    /* Add bottom padding to prevent overlap with browser UI */
+    padding-bottom: 70px;
+    margin-bottom: 20px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.auth-form.hidden {
+    display: none;
+}
+
+.input-group {
+    position: relative;
+    width: 100%;
+}
+
+.input-group i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 18px;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 15px 15px 15px 45px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    color: white;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 16px;
+    box-shadow: var(--glass-shadow);
+    transition: all 0.3s ease;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.input-group input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.form-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    font-size: 14px;
+    margin: -5px 0 5px;
+}
+
+.remember-me {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.remember-me input {
+    cursor: pointer;
+}
+
+.forgot-password {
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.forgot-password:hover {
+    color: white;
+    text-decoration: underline;
+}
+
+.social-login {
+    margin-top: 15px;
+    text-align: center;
+    width: 80%;
+    max-width: 320px;
+}
+
+.social-login p {
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    position: relative;
+}
+
+.social-login p:before,
+.social-login p:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 25%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.social-login p:before {
+    left: 0;
+}
+
+.social-login p:after {
+    right: 0;
+}
+
+.social-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.social-button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--glass-shadow);
+}
+
+.social-button i {
+    font-size: 20px;
+    color: white;
+}
+
+.social-button.google {
+    background: rgba(234, 67, 53, 0.2);
+}
+
+.social-button.facebook {
+    background: rgba(66, 103, 178, 0.2);
+}
+
+.social-button.apple {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.social-button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.social-button.google:hover {
+    background: rgba(234, 67, 53, 0.3);
+}
+
+.social-button.facebook:hover {
+    background: rgba(66, 103, 178, 0.3);
+}
+
+.social-button.apple:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Particle animations for auth screen */
+.particles-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    z-index: -1;
+}
+
+.particle {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+    animation: float 20s linear infinite;
+    opacity: 0.3;
+}
+
+.particle:nth-child(1) {
+    top: 10%;
+    left: 20%;
+    width: 25px;
+    height: 25px;
+    filter: blur(2px);
+    background: rgba(57, 84, 123, 0.3);
+}
+
+.particle:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    width: 15px;
+    height: 15px;
+    filter: blur(1px);
+    background: rgba(75, 83, 32, 0.4);
+}
+
+.particle:nth-child(3) {
+    top: 60%;
+    left: 10%;
+    width: 20px;
+    height: 20px;
+    filter: blur(2px);
+    background: rgba(113, 167, 68, 0.35);
+}
+
+.particle:nth-child(4) {
+    top: 70%;
+    left: 70%;
+    width: 18px;
+    height: 18px;
+    filter: blur(1.5px);
+    background: rgba(57, 84, 123, 0.3);
+}
+
+.particle:nth-child(5) {
+    top: 40%;
+    left: 40%;
+    width: 30px;
+    height: 30px;
+    filter: blur(3px);
+    background: rgba(75, 83, 32, 0.25);
+}
+
+.particle:nth-child(6) {
+    top: 80%;
+    left: 30%;
+    width: 22px;
+    height: 22px;
+    filter: blur(2px);
+    background: rgba(113, 167, 68, 0.3);
+}
+
+.particle.red {
+    background: rgba(139, 58, 58, 0.4);
+}
+
+@keyframes float {
+    0% {
+        transform: translateY(0) translateX(0) rotate(0deg);
+        opacity: 0.3;
+    }
+    25% {
+        transform: translateY(-100px) translateX(50px) rotate(90deg);
+        opacity: 0.6;
+    }
+    50% {
+        transform: translateY(-200px) translateX(-50px) rotate(180deg);
+        opacity: 0.3;
+    }
+    75% {
+        transform: translateY(-300px) translateX(100px) rotate(270deg);
+        opacity: 0.6;
+    }
+    100% {
+        transform: translateY(-400px) translateX(0) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+/* Error message styling */
+.error-message {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(231, 76, 60, 0.9);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    animation: slide-in 0.3s ease-out forwards;
+    max-width: 80%;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.error-message i {
+    font-size: 18px;
+}
+
+.error-message.fade-out {
+    animation: fade-out 0.5s ease-out forwards;
+}
+
+@keyframes slide-in {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+@keyframes fade-out {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -20px);
+    }
+}
+
+/* Auth container - for the separated auth.html page */
+.auth-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #1a1a1a;
+}
+
+.auth-container .overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    z-index: 10;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Error message styling */
+.error-message {
+    background-color: rgba(255, 69, 58, 0.9);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    width: 100%;
+    text-align: center;
+    font-weight: 500;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shake {
+    10%, 90% {
+        transform: translateX(-1px);
+    }
+    20%, 80% {
+        transform: translateX(2px);
+    }
+    30%, 50%, 70% {
+        transform: translateX(-4px);
+    }
+    40%, 60% {
+        transform: translateX(4px);
+    }
+}
+
+/* Logout button styling */
+.logout-button {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: var(--ui-accent);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 8px 15px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    outline: none;
+}
+
+.logout-button:hover {
+    background: #c0392b;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Username display */
+.username-display {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    color: #fff;
+    border-radius: 50px;
+    padding: 8px 15px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--glass-border);
+    animation: slide-in-left 0.5s ease-out forwards;
+    z-index: 20;
+}
+
+/* Username in top right corner */
+.username-display.top-right {
+    top: 15px;
+    right: 15px;
+    left: auto;
+    bottom: auto;
+    animation: slide-in-right 0.5s ease-out forwards;
+}
+
+.username-display i {
+    color: var(--ui-info);
+}
+
+@keyframes slide-in-left {
+    0% {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slide-in-right {
+    0% {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Make sure username and logout button don't overlap on small screens */
+@media (max-width: 350px) {
+    .username-display:not(.top-right) {
+        bottom: 40px;
+    }
+}
+
+/* Button container for start and logout buttons */
+.button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    justify-content: center;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 15px;
+    /* Add bottom padding for all browsers */
+    padding-bottom: 100px; /* Increased from 70px to prevent button cutoff */
+    margin-bottom: 30px; /* Increased from 20px */
+}
+
+/* Responsive button adjustments */
+@media (max-width: 430px) {
+    .button-container {
+        max-width: 250px;
+    }
+    
+    .game-button {
+        padding: 14px 30px;
+        font-size: 16px;
+        width: 100%;
+        max-width: 250px;
+        margin-bottom: 0;
+    }
+    
+    .logout-game-button {
+        padding: 12px 25px;
+        font-size: 14px;
+        width: 100%;
+        max-width: 220px;
+        margin-top: 0;
+    }
+    
+    .game-description {
+        font-size: 14px;
+        line-height: 1.4;
+        padding: 15px;
+    }
+}
+
+/* Very small screens */
+@media (max-height: 600px) {
+    .button-container {
+        gap: 5px;
+        margin-top: 10px;
+    }
+    
+    .game-button {
+        padding: 10px 25px;
+        font-size: 16px;
+        margin-bottom: 0;
+    }
+    
+    .logout-game-button {
+        padding: 8px 20px;
+        font-size: 14px;
+        margin-top: 0;
+    }
+
+    /* Ensure secondary button is visible */
+    .game-button.secondary-button {
+        margin-top: 2px;
+        padding: 8px 20px;
+        font-size: 14px;
+    }
+}
+
+/* Even smaller screens - convert to horizontal buttons */
+@media (max-height: 500px) {
+    .button-container {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin: 5px auto;
+    }
+    
+    .game-button {
+        margin: 0 5px;
+        padding: 8px 20px;
+        font-size: 14px;
+        min-width: 120px;
+    }
+    
+    .game-button.secondary-button {
+        margin: 0 5px;
+        margin-top: 0;
+    }
+
+    .overlay {
+        padding-bottom: 10px;
+    }
+
+    .game-description {
+        margin-bottom: 10px;
+        padding: 10px;
+        font-size: 12px;
+    }
+    
+    #game-character {
+        width: 100px;
+        margin: 5px auto;
+    }
+}
+
+/* Extra small devices (portrait phones) */
+@media (max-width: 350px) {
+    .button-container {
+        gap: 8px;
+    }
+    
+    .game-button, .logout-game-button {
+        padding: 10px 20px;
+        font-size: 15px;
+    }
+}
+
+/* Small screens with both constraints */
+@media (max-width: 350px) and (max-height: 600px) {
+    .overlay {
+        justify-content: flex-start;
+        padding-top: 10px;
+        overflow-y: auto;
+    }
+    
+    .button-container {
+        flex-direction: row;
+        flex-wrap: wrap;
+        margin-top: auto;
+        margin-bottom: 10px;
+        gap: 5px;
+    }
+    
+    .game-button, 
+    .game-button.secondary-button {
+        padding: 8px 15px;
+        font-size: 12px;
+        min-width: 0;
+        width: auto;
+        margin: 0 2px;
+    }
+    
+    .game-description {
+        margin-bottom: 5px;
+        line-height: 1.2;
+        max-height: 80px;
+        overflow-y: auto;
+    }
+    
+    .game-title h1 {
+        font-size: 28px;
+    }
+}
+
+/* Dynamic small height handling via JS */
+body.very-small-height .game-container {
+    height: calc(var(--vh, 1vh) * 100);
+}
+
+body.very-small-height #startScreen {
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+body.very-small-height .button-container {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+    margin: 5px 0;
+}
+
+body.very-small-height .game-button,
+body.very-small-height .game-button.secondary-button {
+    padding: 6px 12px;
+    font-size: 12px;
+    margin: 0 5px;
+    margin-top: 0;
+    min-width: 120px;
+    flex: 0 0 auto;
+}
+
+body.very-small-height .game-title h1 {
+    font-size: 32px;
+}
+
+/* Additional styles for extremely tiny screens */
+body.tiny-screen .button-container {
+    flex-direction: row;
+    gap: 5px;
+    padding-bottom: 0;
+}
+
+body.tiny-screen .game-button,
+body.tiny-screen .game-button.secondary-button {
+    padding: 4px 8px;
+    font-size: 10px;
+    min-width: 0;
+    width: auto;
+    margin: 0 2px;
+    box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
+}
+
+body.tiny-screen .game-description {
+    font-size: 10px;
+    padding: 5px 8px;
+    margin-bottom: 5px;
+    max-height: 40px;
+    line-height: 1.2;
+}
+
+body.tiny-screen #game-character {
+    width: 40px;
+    margin: 2px auto;
+}
+
+body.tiny-screen .game-title h1 {
+    font-size: 20px;
+}
+
+body.tiny-screen .game-title h1:last-child {
+    margin-top: -2px;
+}
+
+body.tiny-screen .description-icons {
+    display: none;
+}
+
+body.tiny-screen .footer-text {
+    display: none;
+}
+
+/* Common styles for overlay screens with improved glass morphism */
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(135, 206, 235, 0.8), rgba(57, 84, 123, 0.9));
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Changed from space-around to center */
+    align-items: center;
+    color: var(--ui-light);
+    z-index: 10;
+    padding: 20px 20px 80px; /* Increased bottom padding to avoid browser UI overlap */
+    box-sizing: border-box;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    overflow-y: auto; /* Allow scrolling if content is too tall */
+}
+
+/* Start screen with modern styling */
+#game-character {
+    width: 120px; /* Reduced from 140px */
+    height: auto;
+    margin: 10px auto 5px; /* Reduced bottom margin */
+    display: block;
+    animation: character-bounce 3s ease-in-out infinite;
+    filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.3));
+    transition: all 0.3s ease;
+}
+
+#game-character:hover {
+    transform: scale(1.05) rotate(2deg);
+    filter: drop-shadow(0 15px 20px rgba(0, 0, 0, 0.4));
+}
+
+@keyframes character-bounce {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-15px) rotate(3deg); }
+}
+
+.game-title {
+    text-align: center;
+    margin-bottom: 10px; /* Reduced from 15px */
+    position: relative;
+}
+
+.game-title h1 {
+    font-size: 48px;
+    line-height: 0.9;
+    font-weight: 800;
+    color: var(--ui-light);
+    text-shadow: 
+        0 2px 0 var(--pepe-dark-green),
+        0 4px 0 var(--pepe-dark-green),
+        0 6px 0 var(--bunny-dark-blue),
+        0 8px 10px rgba(0, 0, 0, 0.8);
+    letter-spacing: 2px;
+    position: relative;
+    z-index: 1;
+}
+
+.game-title h1:last-child {
+    color: var(--ui-light);
+    text-shadow: 
+        0 2px 0 var(--bunny-dark-blue),
+        0 4px 0 var(--bunny-dark-blue),
+        0 6px 0 var(--pepe-dark-green),
+        0 8px 10px rgba(0, 0, 0, 0.8);
+    margin-top: -5px;
+}
+
+/* Secondary button style */
+.game-button.secondary-button {
+    background: #39547B;
+    margin-top: 0px; /* Decreased from default margin */
+    padding: 12px 25px;
+    font-size: 16px;
+}
+
+.game-button.secondary-button:hover {
+    background: #3d5674;
+    transform: translateY(-3px);
+    box-shadow: 0 15px 25px rgba(52, 73, 94, 0.5), inset 0 -5px 0 rgba(0, 0, 0, 0.3);
+}
+
+.game-button.secondary-button:active,
+.game-button.secondary-button.active-touch {
+    transform: translateY(0);
+    box-shadow: 0 5px 15px rgba(52, 73, 94, 0.4), inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+}
+
+.game-button.secondary-button::before {
+    background: linear-gradient(to right, #34495e, #2c3e50);
+}
+
+/* Game over buttons container */
+.game-over-buttons {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 250px;
+    gap: 15px;
+    margin-top: 10px;
+    /* Add bottom padding to avoid browser navigation overlap */
+    padding-bottom: 60px;
+    margin-bottom: 20px;
+}
+
+.game-over-buttons .game-button {
+    margin-top: 0;
+    opacity: 1;
+    visibility: visible;
+}
+
+.game-over-buttons .game-button.secondary-button {
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    box-shadow: 0 4px 0 #1c6ea4, 0 6px 10px rgba(52, 152, 219, 0.3);
+}
+
+.game-over-buttons .game-button.secondary-button:hover {
+    background: linear-gradient(to bottom, #4dabf7, #3498db);
+    box-shadow: 0 8px 0 #1c6ea4, 0 12px 20px rgba(52, 152, 219, 0.4);
+}
+
+.game-over-buttons .game-button.secondary-button:active,
+.game-over-buttons .game-button.secondary-button.active-touch {
+    transform: translateY(2px);
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    box-shadow: 0 2px 0 #1c6ea4, 0 4px 5px rgba(52, 152, 219, 0.3);
+    transition: all 0.1s ease;
+}
+
+@media (max-width: 430px) {
+    .game-over-buttons {
+        max-width: 220px;
+    }
+    
+    .game-over-buttons .game-button {
+        padding: 12px 20px;
+        font-size: 16px;
+    }
+}
+
+@media (max-height: 600px) {
+    .game-over-buttons {
+        gap: 10px;
+    }
+    
+    .game-over-buttons .game-button {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+}
+
+/* Style specifically for the leaderboard button */
+#leaderboardButton {
+    margin-top: 0;
+    transition: all 0.3s ease;
+}
+
+/* Fixed styling for profile buttons to prevent cutoff */
+.actions-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    width: 100%;
+    margin-top: 15px;
+    margin-bottom: 50px;
+    padding-bottom: 70px;
+}
+
+.actions-row .game-button {
+    width: 100%;
+    max-width: 250px;
+    text-align: center;
+}
+
+/* Mobile login button centering */
+@media (max-width: 430px) {
+    .auth-form .game-button {
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
+        max-width: 250px;
+        display: block;
+    }
+    
+    .auth-form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        width: 100%;
+        max-width: 300px;
+    }
+    
+    .auth-container .overlay {
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+    
+    /* Ensure profile page buttons are not cut off */
+    .actions-row {
+        padding-bottom: 100px;
+        margin-bottom: 60px;
+    }
+    
+    .actions-row .game-button {
+        margin-bottom: 10px;
+    }
+} 

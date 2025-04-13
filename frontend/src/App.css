@@ -1,0 +1,20 @@
+/* General styles */
+body {
+  font-family: 'Arial', sans-serif;
+  background-color: #f8f9fa;
+}
+
+/* Admin dashboard styles */
+.table thead th {
+  background-color: #f1f1f1;
+}
+
+.table th[style*="cursor: pointer"]:hover {
+  background-color: #e2e2e2;
+}
+
+.pagination {
+  margin-top: 20px;
+}
+
+/* Add more custom styles as needed */ 

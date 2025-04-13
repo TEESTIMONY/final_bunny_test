@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="Pepe & Bunny - A fun vertical platformer game featuring an unlikely friendship between a frog and rabbit!">
+    <meta name="theme-color" content="#4B5320">
+    <meta property="og:title" content="Pepe & Bunny - Vertical Platformer Game">
+    <meta property="og:description" content="Join Pepe the Frog and the Bunny on an epic adventure! Jump from platform to platform and collect power-ups in this fun game.">
+    <meta property="og:type" content="website">
+    <title>Hop-Bunny</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- <div id="score">0</div> -->
+        
+        <!-- Start screen - shown after authentication -->
+        <div id="startScreen" class="overlay">
+            <div class="particles-container">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+            
+            <img id="game-character" src="assets/img.png" alt="Pepe and Bunny Characters">    
+            
+            <div class="game-title">
+                <h1>HOP <i class="fas fa-ampersand"></i></h1>
+                <h1>BUNNY</h1>
+            </div>
+            
+            <div class="game-description">
+                <p>Join Hop Bunny on a thrilling vertical adventure! Leap from platform to platform, dodge tricky obstacles, and soar through a vibrant, fast-paced world. How high can you hop</p>
+                <div class="description-icons">
+                    <div class="icon-item"><i class="fas fa-cloud"></i> Beautiful skies</div>
+                    <div class="icon-item"><i class="fas fa-umbrella"></i> Power-ups</div>
+                    <div class="icon-item"><i class="fas fa-mountain"></i> Endless levels</div>
+                </div>
+            </div>
+            
+            <div class="button-container">
+                <button id="startButton" class="game-button" ontouchstart="">
+                    <i class="fas fa-play"></i> PLAY
+                </button>
+                
+                <button id="leaderboardButton" class="game-button secondary-button" onclick="window.location.href='leaderboard.html'" ontouchstart="">
+                    <i class="fas fa-trophy"></i> LEADERBOARD
+                </button>
+            </div>
+            
+            <div class="footer-text">
+                <p class="version">v1.0</p>
+            </div>
+        </div>
+        
+        <div id="gameOver" class="overlay hidden">
+            <div class="particles-container game-over-particles">
+                <div class="particle red"></div>
+                <div class="particle red"></div>
+                <div class="particle red"></div>
+                <div class="particle red"></div>
+                <div class="particle red"></div>
+            </div>
+            
+            <h2><i class="fas fa-skull"></i> Game Over!</h2>
+            
+            <div class="score-display">
+                <div class="score-item">
+                    <span class="score-label"><i class="fas fa-trophy"></i> Your Score:</span>
+                    <span id="finalScore" class="score-value">0</span>
+                </div>
+                <div class="score-item">
+                    <span class="score-label"><i class="fas fa-medal"></i> High Score:</span>
+                    <span id="highScore" class="score-value">0</span>
+                </div>
+            </div>
+            
+            <div class="game-over-buttons">
+                <button id="restartButton" class="game-button" ontouchstart="">
+                    <i class="fas fa-redo-alt"></i> TRY AGAIN
+                </button>
+                
+                <button id="leaderboardButtonGameOver" class="game-button secondary-button" onclick="window.location.href='leaderboard.html'" ontouchstart="">
+                    <i class="fas fa-trophy"></i> LEADERBOARD
+                </button>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Game scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/entities/player.js"></script>
+    <script src="js/entities/platform.js"></script>
+    <script src="js/entities/enemy.js"></script>
+    <script src="js/entities/powerup.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/auth-checker.js"></script>
+    <script src="js/profile-navigation.js"></script>
+</body>
+</html> 

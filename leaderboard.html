@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="Hop Bunny Leaderboard - See who's hopped the highest!">
+    <meta name="theme-color" content="#3498db">
+    <meta property="og:title" content="Hop Bunny Leaderboard">
+    <meta property="og:description" content="Check out the top players in Hop Bunny! Can you beat the highest scores?">
+    <meta property="og:type" content="website">
+    <title>Hop Bunny Leaderboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="leaderboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+</head>
+<body>
+    <div class="game-container leaderboard-container">
+        <!-- Background particles -->
+        <div class="particles-container">
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+        </div>
+        
+        <div class="leaderboard-content">
+            <!-- User info bar -->
+            <div class="user-info-bar">
+                <div class="user-avatar">
+                    <i class="fas fa-user-circle"></i>
+                </div>
+                <div class="user-details">
+                    <span id="currentUsername">Guest Player</span>
+                    <div class="user-score">
+                        <i class="fas fa-star"></i> 
+                        <span id="currentUserScore">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Game logo and title -->
+            <div class="game-title">
+                <h1>HOP BUNNY</h1>
+            </div>
+            
+            <!-- Leaderboard header -->
+            <div class="leaderboard-header">
+                <h2><i class="fas fa-trophy"></i> LEADERBOARD</h2>
+                <p>Top Hoppers of All Time</p>
+            </div>
+            
+            <!-- Leaderboard table -->
+            <div class="leaderboard-table">
+                <div class="leaderboard-row header">
+                    <div class="rank"><i class="fas fa-trophy"></i> RANK</div>
+                    <div class="player"><i class="fas fa-user"></i> PLAYER</div>
+                    <div class="score"><i class="fas fa-star"></i> SCORE</div>
+                </div>
+                <div class="leaderboard-rows-container">
+                    <!-- Leaderboard rows will be dynamically populated -->
+                    <div class="leaderboard-loading">
+                        <div class="loading-spinner">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </div>
+                        <p>Loading leaderboard data...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action buttons -->
+            <div class="leaderboard-buttons">
+                <button id="backToGameButton" class="game-button primary-button" onclick="window.location.href='index.html'" ontouchstart="">
+                    <i class="fas fa-gamepad"></i> <span>PLAY GAME</span>
+                </button>
+                
+                <button id="refreshButton" class="game-button secondary-button" ontouchstart="">
+                    <i id="refresh-icon" class="fas fa-sync-alt"></i> <span>REFRESH</span>
+                </button>
+            </div>
+            
+            <!-- Version info -->
+            <div class="footer-text">
+                <p class="version">v1.0</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/leaderboard.js"></script>
+    <script src="js/profile-navigation.js"></script>
+</body>
+</html> 

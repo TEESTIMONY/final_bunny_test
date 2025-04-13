@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referrals Dashboard</title>
+    <link rel="stylesheet" href="css/referrals.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1>Referrals Dashboard</h1>
+            <div class="dashboard-actions">
+                <button class="export-btn" onclick="exportToCSV()">Export to CSV</button>
+                <button class="export-btn" onclick="exportToJSON()">Export to JSON</button>
+            </div>
+        </header>
+
+        <div id="error-message" class="error-message"></div>
+
+        <section class="dashboard-section">
+            <h2>Referral Statistics</h2>
+            <div id="stats-loading" class="loading-indicator">
+                <div class="loading-spinner"></div>
+                <span>Loading statistics...</span>
+            </div>
+            <div id="stats-container" class="stats-container"></div>
+        </section>
+
+        <section class="dashboard-section">
+            <h2>Recent Referrals</h2>
+            <div id="referrals-loading" class="loading-indicator">
+                <div class="loading-spinner"></div>
+                <span>Loading referrals...</span>
+            </div>
+            <div class="table-container">
+                <table class="referral-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Referrer</th>
+                            <th>Referred</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Reward</th>
+                        </tr>
+                    </thead>
+                    <tbody id="referrals-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="dashboard-grid">
+            <section class="dashboard-section">
+                <h2>Top Referrers</h2>
+                <div id="top-referrers-loading" class="loading-indicator">
+                    <div class="loading-spinner"></div>
+                    <span>Loading top referrers...</span>
+                </div>
+                <div id="top-referrers" class="top-referrers"></div>
+            </section>
+
+            <section class="dashboard-section">
+                <h2>Monthly Referrals</h2>
+                <div class="chart-placeholder">
+                    <p>Chart will be displayed here</p>
+                    <p class="placeholder-note">In a real implementation, this would display a chart showing referral trends over time.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="js/referrals.js"></script>
+</body>
+</html> 

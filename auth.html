@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="Pepe & Bunny - A fun vertical platformer game featuring an unlikely friendship between a frog and rabbit!">
+    <meta name="theme-color" content="#4B5320">
+    <meta property="og:title" content="Pepe & Bunny - Vertical Platformer Game">
+    <meta property="og:description" content="Join Pepe the Frog and the Bunny on an epic adventure! Jump from platform to platform and collect power-ups in this fun game.">
+    <meta property="og:type" content="website">
+    <title>Hop-Bunny - Authentication</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+</head>
+<body>
+    <div class="auth-container">
+        <div id="authScreen" class="overlay">
+            <div class="particles-container">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+            
+            <img id="game-character" src="assets/img.png" alt="Pepe and Bunny Characters">    
+            
+            <div class="game-title">
+                <h1>HOP <i class="fas fa-ampersand"></i></h1>
+                <h1>BUNNY</h1>
+            </div>
+
+            <div class="auth-tabs">
+                <button id="loginTab" class="auth-tab-button active">Login</button>
+                <button id="registerTab" class="auth-tab-button">Register</button>
+            </div>
+            
+            <div id="loginForm" class="auth-form">
+                <div class="input-group">
+                    <i class="fas fa-envelope"></i>
+                    <input type="email" id="loginEmail" placeholder="Email" required>
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="loginPassword" placeholder="Password" required>
+                </div>
+                <div class="form-footer">
+                    <label class="remember-me">
+                        <input type="checkbox" id="rememberMe">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="#" class="forgot-password">Forgot Password?</a>
+                </div>
+                <button id="loginButton" class="game-button" ontouchstart="">
+                    <i class="fas fa-sign-in-alt"></i> LOGIN
+                </button>
+            </div>
+            
+            <div id="registerForm" class="auth-form hidden">
+                <div class="input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="registerUsername" placeholder="Username" required>
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-envelope"></i>
+                    <input type="email" id="registerEmail" placeholder="Email" required>
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="registerPassword" placeholder="Password" required>
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="confirmPassword" placeholder="Confirm Password" required>
+                </div>
+                <button id="registerButton" class="game-button" ontouchstart="">
+                    <i class="fas fa-user-plus"></i> REGISTER
+                </button>
+            </div>
+            
+            <div class="footer-text">
+                <p class="version">v1.0</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+</body>
+</html> 

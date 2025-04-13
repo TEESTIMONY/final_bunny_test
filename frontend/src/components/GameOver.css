@@ -1,0 +1,53 @@
+.stats-container {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin: 1.5rem 0;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 1rem;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+  min-width: 120px;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0;
+  color: #007bff;
+}
+
+.stat-item h5 {
+  margin-bottom: 0.5rem;
+  color: #6c757d;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Animation for the score value */
+@keyframes scorePopup {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.score-highlight {
+  animation: scorePopup 0.5s ease-in-out;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .stats-container {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+  }
+  
+  .stat-item {
+    width: 90%;
+    max-width: 300px;
+  }
+} 
