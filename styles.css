@@ -51,7 +51,7 @@ body {
     align-items: center;
     min-height: 100vh;
     color: var(--ui-light);
-    background: linear-gradient(135deg, var(--pepe-dark-green), var(--bunny-dark-blue));
+    background: linear-gradient(135deg, rgba(87, 206, 235, 0.8), rgba(57, 84, 123, 0.9));
 }
 
 .game-container {
