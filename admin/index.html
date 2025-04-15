@@ -4,12 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hop Bunny Admin Dashboard</title>
-    <base href="/admin/">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="/admin/css/dashboard.css">
+    <style>
+        /* Add immediate fixes for mobile */
+        @media (max-width: 768px) {
+            .container-fluid {
+                padding: 0;
+            }
+            
+            main {
+                padding: 1rem !important;
+            }
+            
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -100%;
+                width: 80%;
+                height: 100vh;
+                z-index: 1000;
+                transition: 0.3s;
+                background-color: #212529 !important;
+            }
+            
+            .sidebar.show {
+                left: 0;
+            }
+            
+            .login-image {
+                max-width: 200px;
+                height: auto;
+                margin: 0 auto 1rem auto;
+                display: block;
+            }
+            
+            .auth-welcome {
+                padding: 1rem;
+            }
+            
+            .pagination-container {
+                flex-direction: column;
+                gap: 1rem;
+            }
+        }
+    </style>
 </head>
-<body>
+<body class="bg-light">
     <div class="container-fluid">
         <div class="row">
             <!-- Mobile Menu Toggle -->
@@ -23,12 +65,12 @@
             <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar">
                 <div class="position-sticky pt-3">
                     <div class="d-flex align-items-center pb-3 mb-3 text-white text-decoration-none border-bottom">
-                        <img src="../assets/img.png" alt="Hop Bunny Logo" width="40" height="40" class="me-2">
+                        <img src="/assets/img.png" alt="Hop Bunny Logo" width="40" height="40" class="me-2">
                         <span class="fs-5 fw-semibold">Hop Bunny Admin</span>
                     </div>
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link active text-white" href="#">
+                            <a class="nav-link active text-white" href="/admin">
                                 <i class="bi bi-people-fill me-2"></i>
                                 Users
                             </a>
@@ -38,7 +80,7 @@
             </nav>
 
             <!-- Main content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 bg-white min-vh-100">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">User Management</h1>
                     <div id="loginStatusContainer">
@@ -185,23 +227,29 @@
     </div>
 
     <script>
-        // Mobile menu toggle
-        document.getElementById('sidebarToggle').addEventListener('click', function() {
+        // Improved mobile menu toggle
+        document.getElementById('sidebarToggle')?.addEventListener('click', function(e) {
+            e.stopPropagation();
             document.getElementById('sidebar').classList.toggle('show');
         });
 
-        // Close sidebar when clicking outside on mobile
+        // Close sidebar when clicking outside
         document.addEventListener('click', function(event) {
             const sidebar = document.getElementById('sidebar');
             const sidebarToggle = document.getElementById('sidebarToggle');
             
-            if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+            if (sidebar && !sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
                 sidebar.classList.remove('show');
             }
+        });
+
+        // Prevent closing when clicking inside sidebar
+        document.getElementById('sidebar')?.addEventListener('click', function(e) {
+            e.stopPropagation();
         });
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/dashboard.js"></script>
+    <script src="/admin/js/dashboard.js"></script>
 </body>
 </html> 
