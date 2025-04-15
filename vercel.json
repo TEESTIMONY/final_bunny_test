@@ -1,45 +1,6 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "headers": [
-    {
-      "source": "/admin/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, must-revalidate"
-        }
-      ]
-    }
-  ],
-  "routes": [
-    {
-      "src": "/admin/?$",
-      "dest": "/admin/index.html"
-    },
-    {
-      "src": "/admin/css/(.*)",
-      "dest": "/admin/css/$1"
-    },
-    {
-      "src": "/admin/js/(.*)",
-      "dest": "/admin/js/$1"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    }
-  ],
-  "rewrites": [
-    { 
-      "source": "/admin",
-      "destination": "/admin/index.html"
-    },
-    {
-      "source": "/admin/:path*",
-      "destination": "/admin/:path*"
-    }
-  ],
   "github": {
     "silent": true
   }
