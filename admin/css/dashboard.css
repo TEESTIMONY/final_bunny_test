@@ -144,7 +144,10 @@ main {
         padding-top: 0;
         box-shadow: none;
     }
-    
+    .login-image {
+        max-width: 50px;
+        margin-bottom: 30px;
+    }
     main {
         margin-top: 20px;
     }
@@ -220,4 +223,3 @@ main {
     }
 }
 
-} 
