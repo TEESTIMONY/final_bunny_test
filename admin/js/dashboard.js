@@ -468,8 +468,9 @@ function renderUserTable() {
             <td>${userNumber}</td>
             <td data-label="Username">${user.username}</td>
             <td data-label="Email">${user.email}</td>
-            <td data-label="High Score">${user.score}</td>
+            <td data-label="Points">${user.score}</td>
             <td data-label="Games Played">${user.gamesPlayed}</td>
+            <td data-label="Refferal">${user.referralCount}</td>
             <td data-label="Created At">${user.createdAt}</td>
             <td>
                 <button class="btn btn-sm btn-outline-primary view-details" data-user-id="${user.userId}">
