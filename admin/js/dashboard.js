@@ -76,9 +76,6 @@ const elements = {
  * Initialize the dashboard
  */
 function initDashboard() {
-    // Hide all data sections first
-    hideDataSections();
-    
     // Check if user is already logged in
     checkAuthStatus();
     
@@ -88,7 +85,6 @@ function initDashboard() {
     // Only load data if user is logged in
     if (dashboardState.isLoggedIn) {
         loadUserData();
-        showDataSections();
     } else {
         // Show login prompt if not logged in
         showLoginPrompt();
@@ -145,7 +141,6 @@ function hideDataSections() {
     // Hide all data sections
     dataSections.forEach(section => {
         section.classList.add('d-none');
-        section.classList.remove('show');
     });
 }
 
@@ -159,7 +154,6 @@ function showDataSections() {
     // Show all data sections
     dataSections.forEach(section => {
         section.classList.remove('d-none');
-        section.classList.add('show');
     });
 }
 
@@ -254,14 +248,17 @@ function handleLogin() {
         dashboardState.token = 'admin-token-2023';
         dashboardState.adminEmail = email;
         
-        // Update UI and load data
+        // Update UI for authenticated state
         updateUIForAuthStatus();
-        loadUserData();
-        showDataSections();
         
-        showAuthMessage('Successfully logged in!', 'success');
+        showAuthMessage('Login successful! You now have admin access', 'success');
+        
+        // Load user data now that we're authenticated
+        loadUserData();
     } else {
-        showAuthMessage('Invalid credentials', 'danger');
+        // Invalid credentials
+        showAuthMessage('Invalid admin credentials', 'danger');
+        elements.passwordInput.value = '';
     }
 }
 
