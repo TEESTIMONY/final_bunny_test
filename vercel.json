@@ -3,13 +3,25 @@
   "trailingSlash": false,
   "routes": [
     {
-      "src": "/admin",
+      "src": "/admin/?$",
       "dest": "/admin/index.html"
+    },
+    {
+      "src": "/admin/css/(.*)",
+      "dest": "/admin/css/$1"
+    },
+    {
+      "src": "/admin/js/(.*)",
+      "dest": "/admin/js/$1"
     },
     {
       "src": "/assets/(.*)",
       "dest": "/assets/$1"
     }
+  ],
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin/index.html" },
+    { "source": "/admin/:path*", "destination": "/admin/:path*" }
   ],
   "github": {
     "silent": true
