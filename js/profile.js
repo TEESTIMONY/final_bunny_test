@@ -1145,7 +1145,7 @@ function setupParticleAnimations() {
 function generateReferralLink(userId, username) {
     // Create a base URL for the referral
     const baseUrl = window.location.origin;
-    const path = window.location.pathname.replace('profile.html', '');
+    const path = window.location.pathname.replace('profile', '');
     
     // Generate a secure referral code
     const referralCode = btoa(encodeURIComponent(`${userId}:${username}`));
