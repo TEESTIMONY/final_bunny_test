@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth, db } = require('../config/firebase');
+const { databases, DATABASE_ID, USERS_COLLECTION_ID } = require('../config/appwrite');
 const { verifyToken } = require('../middleware/auth');
 
 /**
@@ -10,13 +10,7 @@ function formatTimestamp(timestamp) {
   if (!timestamp) return null;
   
   let date;
-  if (timestamp._seconds) {
-    // Firestore Timestamp format
-    date = new Date(timestamp._seconds * 1000);
-  } else if (timestamp.seconds) {
-    // Another possible Firestore format
-    date = new Date(timestamp.seconds * 1000);
-  } else if (typeof timestamp === 'string') {
+  if (typeof timestamp === 'string') {
     // ISO string format
     date = new Date(timestamp);
   } else {
@@ -49,34 +43,32 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit, 10);
     const offsetNum = parseInt(offset, 10);
     
-    // Start building the query
-    let query = db.collection('users');
+    // Build query parameters
+    const queries = [];
+    
+    // Apply sorting
+    queries.push(`order${sortDir === 'desc' ? 'Desc' : 'Asc'}("${sortBy}")`);
     
     // Apply filtering if username is provided
     if (username) {
-      // Firebase doesn't support case-insensitive filtering natively
-      // We're using a simple "starts with" filter here
-      query = query.orderBy('username')
-                   .startAt(username)
-                   .endAt(username + '\uf8ff');
-    } else {
-      // Apply sorting
-      query = query.orderBy(sortBy, sortDir);
+      queries.push(`search("username", "${username}")`);
     }
     
-    // Apply pagination
-    query = query.limit(limitNum).offset(offsetNum);
-    
     // Execute the query
-    const snapshot = await query.get();
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      queries,
+      limitNum,
+      offsetNum
+    );
     
-    if (snapshot.empty) {
+    if (response.documents.length === 0) {
       return res.status(200).json({ users: [], total: 0 });
     }
     
     // Get total count for pagination info
-    const totalSnapshot = await db.collection('users').count().get();
-    const total = totalSnapshot.data().count;
+    const total = response.total;
     
     // Process the results
     const users = [];
@@ -88,9 +80,8 @@ router.get('/', async (req, res) => {
       let lastHighScore = Infinity;
       let currentRank = 0;
       
-      snapshot.forEach(doc => {
-        const userData = doc.data();
-        const highScore = userData.highScore || 0;
+      response.documents.forEach(user => {
+        const highScore = user.highScore || 0;
         
         // If this is a new score tier, increment the rank
         if (highScore < lastHighScore) {
@@ -98,49 +89,57 @@ router.get('/', async (req, res) => {
           lastHighScore = highScore;
         }
         
-        userRanks[doc.id] = currentRank;
+        userRanks[user.$id] = currentRank;
       });
     }
     
-    snapshot.forEach(doc => {
-      const userData = doc.data();
-      
+    response.documents.forEach(user => {
       // Determine rank from calculated ranks if available, or use stored rank
-      let rank = userData.rank;
+      let rank = user.rank;
       
-      if (userRanks[doc.id]) {
-        rank = userRanks[doc.id];
+      if (userRanks[user.$id]) {
+        rank = userRanks[user.$id];
         
         // Update rank in database if it's changed or not set
-        if (rank !== userData.rank) {
-          db.collection('users').doc(doc.id).update({ 
-            rank: rank,
-            updatedAt: new Date().toISOString()
-          }).catch(err => console.error('Error updating user rank:', err));
+        if (rank !== user.rank) {
+          databases.updateDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            user.$id,
+            { 
+              rank: rank,
+              updatedAt: new Date().toISOString()
+            }
+          ).catch(err => console.error('Error updating user rank:', err));
         }
       }
 
       // If user doesn't have referralCount, add it to the document
-      if (userData.referralCount === undefined) {
-        console.log(`Adding missing referralCount field to user ${doc.id}`);
-        db.collection('users').doc(doc.id).update({
-          referralCount: 0,
-          updatedAt: new Date().toISOString()
-        }).catch(err => console.error('Error adding referralCount:', err));
+      if (user.referralCount === undefined) {
+        console.log(`Adding missing referralCount field to user ${user.$id}`);
+        databases.updateDocument(
+          DATABASE_ID,
+          USERS_COLLECTION_ID,
+          user.$id,
+          {
+            referralCount: 0,
+            updatedAt: new Date().toISOString()
+          }
+        ).catch(err => console.error('Error adding referralCount:', err));
       }
       
       users.push({
-        uid: doc.id,
-        email: userData.email,
-        username: userData.username,
-        displayName: userData.displayName,
-        score: userData.score || userData.highScore || 0,
-        highScore: userData.highScore || 0,
-        lastGameScore: userData.lastGameScore || 0,
-        gamesPlayed: userData.gamesPlayed || 0,
+        uid: user.$id,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+        score: user.score || user.highScore || 0,
+        highScore: user.highScore || 0,
+        lastGameScore: user.lastGameScore || 0,
+        gamesPlayed: user.gamesPlayed || 0,
         rank: rank || 999, // Default to a high rank if not calculated/stored
-        referralCount: userData.referralCount || 0, // Include referral count
-        createdAt: formatTimestamp(userData.createdAt)
+        referralCount: user.referralCount || 0, // Include referral count
+        createdAt: formatTimestamp(user.createdAt)
       });
     });
     

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../config/firebase');
+const { databases, DATABASE_ID, USERS_COLLECTION_ID } = require('../config/appwrite');
 
 /**
  * @route POST /api/update-users
@@ -12,33 +12,35 @@ router.post('/', async (req, res) => {
     console.log('Starting to update users with referralCount field...');
     
     // Get all users
-    const usersRef = db.collection('users');
-    const snapshot = await usersRef.get();
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID
+    );
     
-    if (snapshot.empty) {
+    if (response.documents.length === 0) {
       return res.status(200).json({ message: 'No users found', updated: 0 });
     }
     
     let updateCount = 0;
-    const batch = db.batch();
     
-    snapshot.forEach(doc => {
-      const userData = doc.data();
-      
+    for (const user of response.documents) {
       // Check if user doesn't have a referralCount field
-      if (userData.referralCount === undefined) {
-        console.log(`Adding referralCount to user: ${userData.username || doc.id}`);
-        const userRef = db.collection('users').doc(doc.id);
-        batch.update(userRef, { 
-          referralCount: 0,
-          updatedAt: new Date().toISOString()
-        });
+      if (user.referralCount === undefined) {
+        console.log(`Adding referralCount to user: ${user.username || user.$id}`);
+        await databases.updateDocument(
+          DATABASE_ID,
+          USERS_COLLECTION_ID,
+          user.$id,
+          { 
+            referralCount: 0,
+            updatedAt: new Date().toISOString()
+          }
+        );
         updateCount++;
       }
-    });
+    }
     
     if (updateCount > 0) {
-      await batch.commit();
       console.log(`Successfully updated ${updateCount} users`);
       return res.status(200).json({ 
         message: `Successfully added referralCount to ${updateCount} users`,

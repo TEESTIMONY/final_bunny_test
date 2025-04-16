@@ -4,7 +4,7 @@
  */
 
 // API Configuration
-const API_BASE_URL = 'https://final-backend-test.vercel.app/api';
+const API_BASE_URL = 'https://final-again-backend.vercel.app/api';
 const API_ENDPOINTS = {
     users: '/users'
 };

@@ -322,7 +322,7 @@ class Game {
 
         try {
             // Use the API endpoint without authentication
-            fetch('https://final-backend-test.vercel.app/api/update-score', {
+            fetch('https://final-again-backend.vercel.app/api/update-score', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -410,7 +410,7 @@ class Game {
         
         // Fetch high score from backend
         try {
-            fetch(`https://final-backend-test.vercel.app/api/user/${userId}`, {
+            fetch(`https://final-again-backend.vercel.app/api/user/${userId}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json'

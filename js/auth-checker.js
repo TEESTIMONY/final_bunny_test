@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (userId && token) {
             // API URL - Using the backend URL
-            const API_BASE_URL = 'https://final-backend-test.vercel.app';
+            const API_BASE_URL = 'https://final-again-backend.vercel.app';
             
             // Fetch user data from the database
             fetch(`${API_BASE_URL}/api/user/${userId}`, {

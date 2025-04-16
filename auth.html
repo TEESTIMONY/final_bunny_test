@@ -59,6 +59,7 @@
                 <button id="loginButton" class="game-button" ontouchstart="">
                     <i class="fas fa-sign-in-alt"></i> LOGIN
                 </button>
+                <div id="loginError" class="error-message"></div>
             </div>
             
             <div id="registerForm" class="auth-form hidden">
@@ -81,6 +82,7 @@
                 <button id="registerButton" class="game-button" ontouchstart="">
                     <i class="fas fa-user-plus"></i> REGISTER
                 </button>
+                <div id="registerError" class="error-message"></div>
             </div>
             
             <div class="footer-text">
@@ -90,7 +92,9 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/utils.js"></script>
-    <script src="js/auth.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+    <script type="module" src="js/config/appwrite.js"></script>
+    <script type="module" src="js/utils.js"></script>
+    <script type="module" src="js/auth.js"></script>
 </body>
 </html> 

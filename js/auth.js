@@ -1,5 +1,14 @@
 // Authentication functionality with backend integration
 
+import config from './config/appwrite.js';
+
+// Use the global Appwrite object instead of importing
+const client = new Appwrite.Client()
+    .setEndpoint(config.endpoint)
+    .setProject(config.projectId);
+
+const account = new Appwrite.Account(client);
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const authScreen = document.getElementById('authScreen');
@@ -10,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const registerForm = document.getElementById('registerForm');
     const loginButton = document.getElementById('loginButton');
     const registerButton = document.getElementById('registerButton');
+    const loginError = document.getElementById('loginError');
+    const registerError = document.getElementById('registerError');
 
     // Form inputs
     const loginEmail = document.getElementById('loginEmail');
@@ -25,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
                            window.location.hostname === "localhost";
     
     // API URLs - Using the new backend URL
-    const API_BASE_URL = 'https://final-backend-test.vercel.app';
+    const API_BASE_URL = 'https://final-again-backend.vercel.app';
     const REGISTER_URL = `${API_BASE_URL}/api/auth/register`;
     const LOGIN_URL = `${API_BASE_URL}/api/auth/login`;
 
@@ -78,465 +89,165 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Form submission
-    loginButton.addEventListener('click', (e) => {
+    loginButton.addEventListener('click', async (e) => {
         e.preventDefault();
         
-        // Basic validation
-        if (!loginEmail.value || !loginPassword.value) {
-            showError('Please fill in all fields');
-            return;
-        }
-
-        if (!isValidEmail(loginEmail.value)) {
-            showError('Please enter a valid email');
-            return;
-        }
-
-        // Call the login API
-        login(loginEmail.value, loginPassword.value);
-    });
-
-    registerButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        
-        // Basic validation
-        if (!registerUsername.value || !registerEmail.value || 
-            !registerPassword.value || !confirmPassword.value) {
-            showError('Please fill in all fields');
-            return;
-        }
-
-        if (!isValidEmail(registerEmail.value)) {
-            showError('Please enter a valid email');
-            return;
-        }
-
-        if (registerPassword.value !== confirmPassword.value) {
-            showError('Passwords do not match');
-            return;
-        }
-
-        if (registerPassword.value.length < 6) {
-            showError('Password must be at least 6 characters');
-            return;
-        }
-
-        // Call the register API
-        register(registerUsername.value, registerEmail.value, registerPassword.value);
-    });
-
-    // Login function
-    async function login(email, password) {
-        loginButton.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Logging in...';
-        loginButton.disabled = true;
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
         
         try {
-            if (isDevelopment && false) { // Set to false to always use the real API
-                // For development, simulate a successful login
-                simulateLogin();
-                return;
-            }
-
-            const response = await fetch(LOGIN_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
-            }
-
-            // Extract token and user ID from response
-            const token = data.token;
-            const userId = data.userId;
-            
-            // First, save these essential items
-            if (rememberMe.checked) {
-                localStorage.setItem('token', token);
-                localStorage.setItem('userId', userId);
-                localStorage.setItem('highScore', data.highScore || '0');
-                localStorage.setItem('score', data.score || '0');
-                localStorage.setItem('referralCount', data.referralCount || '0');
-                localStorage.setItem('referralBonus', data.referralBonus || '0');
-            } else {
-                sessionStorage.setItem('token', token);
-                sessionStorage.setItem('userId', userId);
-                sessionStorage.setItem('highScore', data.highScore || '0');
-                sessionStorage.setItem('score', data.score || '0');
-                sessionStorage.setItem('referralCount', data.referralCount || '0');
-                sessionStorage.setItem('referralBonus', data.referralBonus || '0');
-            }
-            
-            // Now fetch the latest user data from the database to ensure we have the correct username
+            // First, try to delete any existing sessions
             try {
-                const userDataResponse = await fetch(`${API_BASE_URL}/api/user/${userId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (userDataResponse.ok) {
-                    const userData = await userDataResponse.json();
-                    const username = userData.username || userData.displayName;
-                    
-                    // Store the username from database
-                    if (username) {
-                        if (rememberMe.checked) {
-                            localStorage.setItem('username', username);
-                        } else {
-                            sessionStorage.setItem('username', username);
-                        }
-                        console.log('Username fetched from database after login:', username);
-                    }
-                } else {
-                    // If API call fails, fall back to the username from login response
-                    const fallbackUsername = data.username || 
-                                             (data.user && data.user.displayName) || 
-                                             (data.user && data.user.username) || 
-                                             email.split('@')[0];
-                                             
-                    if (rememberMe.checked) {
-                        localStorage.setItem('username', fallbackUsername);
-                    } else {
-                        sessionStorage.setItem('username', fallbackUsername);
-                    }
-                    console.warn('Could not fetch username from database, using fallback:', fallbackUsername);
-                }
-            } catch (fetchError) {
-                console.error('Error fetching user data after login:', fetchError);
-                // Fall back to username from login response
-                const fallbackUsername = data.username || 
-                                         (data.user && data.user.displayName) || 
-                                         (data.user && data.user.username) || 
-                                         email.split('@')[0];
-                                         
-                if (rememberMe.checked) {
-                    localStorage.setItem('username', fallbackUsername);
-                } else {
-                    sessionStorage.setItem('username', fallbackUsername);
-                }
-                console.warn('Could not fetch username from database, using fallback:', fallbackUsername);
+                await account.deleteSession('current');
+            } catch (error) {
+                // Ignore error if no session exists
+                console.log('No existing session to delete');
             }
 
-            // Flag to force a fresh fetch when visiting the profile page
-            sessionStorage.setItem('forceProfileRefresh', 'true');
-
-            // Check for new referral bonuses
-            const username = rememberMe.checked ? 
-                              localStorage.getItem('username') : 
-                              sessionStorage.getItem('username');
+            // Create new email session
+            await account.createEmailSession(email, password);
             
-            let welcomeMessage = `Login successful! Welcome, ${username}!`;
-            if (data.newReferralBonus) {
-                welcomeMessage += ` You've earned ${data.newReferralBonus} bonus points from ${data.newReferrals || 'new'} referrals since your last login!`;
-            }
-
+            // Get account info
+            const user = await account.get();
+            
+            // Store user info in session storage
+            sessionStorage.setItem('userId', user.$id);
+            sessionStorage.setItem('userEmail', user.email);
+            
             // Show success message
-            showSuccess(welcomeMessage);
-
-            // Redirect to game page with a flag to prevent flashing
+            const successMessage = document.createElement('div');
+            successMessage.className = 'success-message';
+            successMessage.innerHTML = `
+                <div class="success-content">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Login successful! Redirecting to game...</p>
+                </div>
+            `;
+            document.querySelector('#loginForm').prepend(successMessage);
+            
+            // Set login redirect flag to prevent flashing
             localStorage.setItem('loginRedirect', 'true');
             
-            // Use direct redirect without setTimeout to avoid flashing
-            window.location.href = 'index.html';
-            
+            // Redirect to index page after a short delay
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 1500);
+
         } catch (error) {
-            showError(error.message || 'Login failed');
             console.error('Login error:', error);
-        } finally {
-            loginButton.innerHTML = '<i class="fas fa-sign-in-alt"></i> LOGIN';
-            loginButton.disabled = false;
+            let errorMessage = error.message;
+            if (error.message.includes('Invalid credentials')) {
+                errorMessage = 'Invalid email or password';
+            }
+            loginError.textContent = errorMessage;
+            loginError.style.display = 'block';
         }
-    }
+    });
 
-    // Register function
-    async function register(username, email, password) {
-        registerButton.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Registering...';
-        registerButton.disabled = true;
+    registerButton.addEventListener('click', async (e) => {
+        e.preventDefault();
         
+        const username = document.getElementById('registerUsername').value;
+        const email = document.getElementById('registerEmail').value;
+        const password = document.getElementById('registerPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        // Validate passwords match
+        if (password !== confirmPassword) {
+            registerError.textContent = 'Passwords do not match';
+            registerError.style.display = 'block';
+            return;
+        }
+
         try {
-            // Check if this user was referred by someone
-            const referrerId = sessionStorage.getItem('referrerId');
-            const referrerUsername = sessionStorage.getItem('referrerUsername');
+            // Create user account in Appwrite
+            const user = await account.create(
+                Appwrite.ID.unique(),
+                email,
+                password,
+                username
+            );
             
-            // Create the registration payload
-            const registrationData = { 
-                username, 
-                email, 
-                password 
-            };
-            
-            // Add referral data if available
-            if (referrerId && referrerUsername) {
-                registrationData.referrerId = referrerId;
-                registrationData.referrerUsername = referrerUsername;
-                console.log(`Including referral data: Referred by ${referrerUsername} (${referrerId})`);
-                console.log('Registration payload with referral:', JSON.stringify(registrationData));
-            } else if (referrerId) {
-                // If we only have referrer ID without username
-                registrationData.referrerId = referrerId;
-                console.log(`Including referral data with ID only: Referred by ID ${referrerId}`);
-                console.log('Registration payload with referral ID only:', JSON.stringify(registrationData));
-            }
-            
-            if (isDevelopment && false) { // Set to false to always use the real API
-                // For development, simulate a successful registration
-                simulateRegistration(referrerId, referrerUsername);
-                return;
-            }
-
-            const response = await fetch(REGISTER_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(registrationData)
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Registration failed');
-            }
-            
-            // Log the complete response data
-            console.log('Registration response from server:', JSON.stringify(data));
-            
-            // Save the username in session storage for use after login
-            sessionStorage.setItem('registeredUsername', username);
-            sessionStorage.setItem('userId', data.userId || (data.user && data.user.uid));
-            sessionStorage.setItem('username', username);
-            
-            console.log('Registration successful. Username saved:', username);
-
-            // Flag to track if we've processed the referral
-            let referralProcessed = false;
-
-            // If registration was successful and there was a referral, update the referral count
-            if (referrerId && !referralProcessed && data.userId) {
-                try {
-                    referralProcessed = true; // Mark as processed
-                    
-                    // Store a flag to prevent duplicate referral bonus processing
-                    const referralProcessKey = `ref_${data.userId}_${referrerId}`;
-                    if (localStorage.getItem(referralProcessKey)) {
-                        console.log('Referral bonus already processed. Skipping.', referralProcessKey);
-                        return;
-                    }
-                    
-                    // Set flag to indicate this referral has been processed
-                    localStorage.setItem(referralProcessKey, 'true');
-                    
-                    const hasUsername = !!referrerUsername;
-                    console.log(`Referral registered: ${username} was referred by ${hasUsername ? referrerUsername : 'ID ' + referrerId}`);
-                    
-                    // Make the update-score API call to add points to both users
-                    const updateScoreUrl = 'https://final-backend-test.vercel.app/api/update-score';
-                    
-                    // Add a unique request identifier to prevent duplicate processing
-                    const uniqueRequestId = `reg_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-                    console.log('Using unique request ID to prevent duplicate processing:', uniqueRequestId);
-                    
-                    // First update the referrer's score
-                    fetch(updateScoreUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            userId: referrerId,
-                            score: 0,  // 500 points for the referrer
-                            isReferral: true,  // Flag to indicate this is a referral bonus
-                            incrementReferralCount: true,  // Add this to increment the referral count
-                            uniqueRequestId: uniqueRequestId // Add a unique request ID to prevent duplicate processing
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(referrerData => {
-                        // Check if the request was identified as a duplicate
-                        if (referrerData.isDuplicate) {
-                            console.warn('Duplicate referral bonus request detected and prevented by server');
-                            return Promise.reject(new Error('Duplicate request'));
-                        }
-                        
-                        console.log('Referrer score update successful:', referrerData);
-                        console.log('Referrer referralCount before:', (referrerData.previousReferralCount || 0));
-                        console.log('Referrer referralCount after:', referrerData.referralCount);
-                        
-                        // Then update the new user's score using the correct userId
-                        const newUserId = sessionStorage.getItem('userId'); // Get the new user's ID from session storage
-                        console.log('Updating new user score with ID:', newUserId);
-                        
-                        // Use a different unique ID for the referred user
-                        const referredUniqueId = `${uniqueRequestId}_referred`;
-                        
-                        return fetch(updateScoreUrl, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                userId: newUserId,
-                                score: 0,  // 200 points for the new user
-                                isReferral: true,  // Flag to indicate this is a referral bonus
-                                uniqueRequestId: referredUniqueId // Add a unique request ID to prevent duplicate processing
-                            })
-                        });
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        // Check if the request was identified as a duplicate
-                        if (data.isDuplicate) {
-                            console.warn('Duplicate referred user bonus request detected and prevented by server');
-                            return;
-                        }
-                        
-                        console.log('New user score update successful:', data);
-                        // Verify that game stats are not affected
-                        if (data.highestSingleGameScore > 0) {
-                            console.warn('Warning: highestSingleGameScore should be 0 for referral bonuses');
-                            data.highestSingleGameScore = 0;
-                        }
-                        if (data.gamesPlayed !== (data.previousGamesPlayed || 0)) {
-                            console.warn('Warning: gamesPlayed was incremented for a referral bonus');
-                            data.gamesPlayed = 0;
-                        }
-                        
-                        // Show the referral bonus notification
-                        showReferralBonusNotification(500, 200);
-                        
-                        // Clear the referral data after successful processing
-                        sessionStorage.removeItem('referrerId');
-                        sessionStorage.removeItem('referrerUsername');
-                    })
-                    .catch(error => {
-                        if (error.message === 'Duplicate request') {
-                            console.log('Skipping duplicate referral bonus processing');
-                        } else {
-                            console.error('Error updating scores:', error);
-                            
-                            // Even if there's an error, we should clear the referral data 
-                            // to prevent repeated attempts that might eventually succeed
-                            sessionStorage.removeItem('referrerId');
-                            sessionStorage.removeItem('referrerUsername');
-                        }
-                    });
-                } catch (referralError) {
-                    // Log the error but don't interrupt the registration flow
-                    console.error('Error with referral:', referralError);
-                }
-            }
-
-            // Handle referral bonus display if applicable
-            let successMessage = data.message || 'Registration successful! You can now log in.';
-            if (referrerId && data.referralBonus) {
-                successMessage += ` You received a ${data.referralBonus} point bonus from your referral!`;
-                
-                // Clear the referral data after successful use
-                sessionStorage.removeItem('referrerId');
-                sessionStorage.removeItem('referrerUsername');
-            }
+            console.log('Appwrite user created:', user);
 
             // Show success message
-            showSuccess(successMessage);
+            const successMessage = document.createElement('div');
+            successMessage.className = 'success-message';
+            successMessage.innerHTML = `
+                <div class="success-content">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Registration successful! Redirecting to login...</p>
+                </div>
+            `;
+            document.querySelector('#registerForm').prepend(successMessage);
 
-            // Clear form fields manually instead of using reset()
-            if (registerUsername) registerUsername.value = '';
-            if (registerEmail) registerEmail.value = '';
-            if (registerPassword) registerPassword.value = '';
-            if (confirmPassword) confirmPassword.value = '';
-            
-            // Switch to login tab after successful registration
-            setTimeout(() => {
-                loginTab.click();
-            }, 1500);
-            
-        } catch (error) {
-            showError(error.message || 'Registration failed');
-            console.error('Registration error:', error);
-        } finally {
-            registerButton.innerHTML = '<i class="fas fa-user-plus"></i> REGISTER';
-            registerButton.disabled = false;
-        }
-    }
-
-    // Simulate login for development
-    function simulateLogin() {
-        console.log('Development mode: Simulating login success');
-        
-        // Extract a username from the email
-        const username = loginEmail.value.split('@')[0];
-        console.log('Development login: Using username', username);
-        
-        // Store user data for development
-        if (rememberMe.checked) {
-            localStorage.setItem('token', 'dev-token');
-            localStorage.setItem('userId', 'dev-user-123');
-            localStorage.setItem('username', username);
-            localStorage.setItem('highScore', '0');
-        } else {
-            sessionStorage.setItem('token', 'dev-token');
-            sessionStorage.setItem('userId', 'dev-user-123');
-            sessionStorage.setItem('username', username);
-            sessionStorage.setItem('highScore', '0');
-        }
-
-        setTimeout(() => {
-            // Redirect to game page
-            window.location.href = 'index.html';
-            
-            // Reset form
-            loginForm.reset();
-            
-            loginButton.innerHTML = '<i class="fas fa-sign-in-alt"></i> LOGIN';
-            loginButton.disabled = false;
-        }, 1500);
-    }
-
-    // Simulate registration for development
-    function simulateRegistration(referrerId, referrerUsername) {
-        console.log('Development mode: Simulating registration success');
-        
-        // Use the provided username for consistent display
-        const username = registerUsername.value;
-        console.log('Development registration: Using username', username);
-        
-        // Store username in session storage
-        sessionStorage.setItem('registeredUsername', username);
-        sessionStorage.setItem('userId', 'dev-user-456');
-        sessionStorage.setItem('username', username);
-        
-        let successMessage = 'Registration successful! You can now log in.';
-        
-        if (referrerId && referrerUsername) {
-            successMessage += ` You received a 500 point bonus from ${referrerUsername}'s referral!`;
-        }
-        
-        showSuccess(successMessage);
-        
-        setTimeout(() => {
-            // Switch to login tab
-            loginTab.click();
-            
-            // Prefill the login form with the registration email for convenience
-            if (loginEmail) {
-                loginEmail.value = registerEmail.value;
+            // Add success message styles if not already added
+            if (!document.getElementById('success-message-styles')) {
+                const style = document.createElement('style');
+                style.id = 'success-message-styles';
+                style.textContent = `
+                    .success-message {
+                        background: linear-gradient(135deg, #28a745, #20c997);
+                        color: white;
+                        padding: 15px;
+                        border-radius: 8px;
+                        margin-bottom: 20px;
+                        text-align: center;
+                        animation: slideDown 0.5s ease-out;
+                    }
+                    .success-content {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 10px;
+                    }
+                    .success-message i {
+                        font-size: 1.2em;
+                    }
+                    @keyframes slideDown {
+                        from {
+                            transform: translateY(-20px);
+                            opacity: 0;
+                        }
+                        to {
+                            transform: translateY(0);
+                            opacity: 1;
+                        }
+                    }
+                `;
+                document.head.appendChild(style);
             }
-            
-            // Reset register form
-            registerForm.reset();
-            
-            registerButton.innerHTML = '<i class="fas fa-user-plus"></i> REGISTER';
-            registerButton.disabled = false;
-        }, 1500);
-    }
+
+            // Clear the form
+            document.getElementById('registerUsername').value = '';
+            document.getElementById('registerEmail').value = '';
+            document.getElementById('registerPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+
+            // Switch to login tab after a delay
+            setTimeout(() => {
+                document.getElementById('loginTab').click();
+                // Pre-fill the login email field
+                document.getElementById('loginEmail').value = email;
+            }, 2000);
+
+        } catch (error) {
+            console.error('Registration error:', error);
+            let errorMessage = error.message;
+            if (error.message.includes('password')) {
+                errorMessage = 'Password must be at least 8 characters long';
+            }
+            registerError.textContent = errorMessage;
+            registerError.style.display = 'block';
+        }
+    });
+
+    // Add password input helper text
+    const passwordHelper = document.createElement('div');
+    passwordHelper.className = 'helper-text';
+    passwordHelper.textContent = 'Password must be at least 8 characters long';
+    passwordHelper.style.cssText = 'color: #666; font-size: 0.8em; margin-top: 4px;';
+    registerPassword.parentNode.appendChild(passwordHelper);
 
     // Social login buttons functionality
     const socialButtons = document.querySelectorAll('.social-button');

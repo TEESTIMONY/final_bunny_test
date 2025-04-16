@@ -1,3 +1,7 @@
+const express = require('express');
+const router = express.Router();
+const { databases, DATABASE_ID, USERS_COLLECTION_ID, REFERRALS_COLLECTION_ID } = require('../config/appwrite');
+
 // Enhanced admin caching with batch updates and prefetching
 const adminCache = {
     data: new Map(),
@@ -30,33 +34,18 @@ const adminCache = {
         this.updateInProgress = true;
         try {
             // Batch fetch all required data
-            const [usersSnapshot, gamesSnapshot, referralsSnapshot] = await Promise.all([
-                db.collection('users').get(),
-                db.collection('games').get(),
-                db.collection('referrals').get()
+            const [usersResponse, referralsResponse] = await Promise.all([
+                databases.listDocuments(DATABASE_ID, USERS_COLLECTION_ID),
+                databases.listDocuments(DATABASE_ID, REFERRALS_COLLECTION_ID)
             ]);
 
             // Process data in memory
             const userStats = new Map();
-            const gameStats = new Map();
             const referralStats = new Map();
 
-            // Process games
-            gamesSnapshot.forEach(doc => {
-                const data = doc.data();
-                const userId = data.userId;
-                if (!gameStats.has(userId)) {
-                    gameStats.set(userId, { count: 0, totalScore: 0 });
-                }
-                const stats = gameStats.get(userId);
-                stats.count++;
-                stats.totalScore += data.score || 0;
-            });
-
             // Process referrals
-            referralsSnapshot.forEach(doc => {
-                const data = doc.data();
-                const referrerId = data.referrerId;
+            referralsResponse.documents.forEach(doc => {
+                const referrerId = doc.referrerId;
                 if (!referralStats.has(referrerId)) {
                     referralStats.set(referrerId, 0);
                 }
@@ -64,20 +53,17 @@ const adminCache = {
             });
 
             // Process users and create paginated data
-            const users = [];
-            usersSnapshot.forEach(doc => {
-                const userData = doc.data();
-                const userId = doc.id;
-                const games = gameStats.get(userId) || { count: 0, totalScore: 0 };
+            const users = usersResponse.documents.map(user => {
+                const userId = user.$id;
                 const referrals = referralStats.get(userId) || 0;
 
-                users.push({
-                    ...userData,
+                return {
+                    ...user,
                     id: userId,
-                    gamesPlayed: games.count,
-                    totalScore: games.totalScore,
+                    gamesPlayed: user.gamesPlayed || 0,
+                    totalScore: user.score || 0,
                     referralCount: referrals
-                });
+                };
             });
 
             // Sort users by score
@@ -102,8 +88,7 @@ const adminCache = {
             const stats = {
                 totalUsers: users.length,
                 activeUsers: users.filter(u => u.lastActive >= new Date(Date.now() - 24 * 60 * 60 * 1000)).length,
-                totalGames: gamesSnapshot.size,
-                totalReferrals: referralsSnapshot.size
+                totalReferrals: referralsResponse.documents.length
             };
 
             this.set('user_stats', stats);
@@ -131,39 +116,37 @@ async function getUsers(page = 1, limit = 10) {
     }
 
     try {
-        const usersRef = db.collection('users');
-        const snapshot = await usersRef
-            .orderBy('createdAt', 'desc')
-            .limit(limit)
-            .offset((page - 1) * limit)
-            .get();
+        const response = await databases.listDocuments(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            [
+                'orderDesc("createdAt")'
+            ],
+            limit,
+            (page - 1) * limit
+        );
 
         // Get user statistics in parallel
-        const statsPromises = snapshot.docs.map(async (doc) => {
-            const userData = doc.data();
-            const userId = doc.id;
+        const statsPromises = response.documents.map(async (user) => {
+            const userId = user.$id;
 
             // Get user statistics in parallel
-            const [gamesPlayed, totalScore, referralCount] = await Promise.all([
-                db.collection('games')
-                    .where('userId', '==', userId)
-                    .count()
-                    .get(),
-                db.collection('scores')
-                    .where('userId', '==', userId)
-                    .get(),
-                db.collection('referrals')
-                    .where('referrerId', '==', userId)
-                    .count()
-                    .get()
+            const [referralCount] = await Promise.all([
+                databases.listDocuments(
+                    DATABASE_ID,
+                    REFERRALS_COLLECTION_ID,
+                    [
+                        `equal("referrerId", "${userId}")`
+                    ]
+                )
             ]);
 
             return {
-                ...userData,
+                ...user,
                 id: userId,
-                gamesPlayed: gamesPlayed.data().count,
-                totalScore: totalScore.docs.reduce((sum, doc) => sum + (doc.data().score || 0), 0),
-                referralCount: referralCount.data().count
+                gamesPlayed: user.gamesPlayed || 0,
+                totalScore: user.score || 0,
+                referralCount: referralCount.documents.length
             };
         });
 
@@ -172,12 +155,12 @@ async function getUsers(page = 1, limit = 10) {
         // Cache the results
         adminCache.set(cacheKey, {
             users: userData,
-            total: (await usersRef.count().get()).data().count
+            total: response.total
         });
 
         return {
             users: userData,
-            total: (await usersRef.count().get()).data().count
+            total: response.total
         };
     } catch (error) {
         console.error('Error fetching users:', error);
@@ -198,18 +181,19 @@ async function getUserStats() {
 
     try {
         // Fetch all statistics in parallel
-        const [totalUsers, activeUsers, totalGames, totalReferrals] = await Promise.all([
-            db.collection('users').count().get(),
-            db.collection('users').where('lastActive', '>=', new Date(Date.now() - 24 * 60 * 60 * 1000)).count().get(),
-            db.collection('games').count().get(),
-            db.collection('referrals').count().get()
+        const [usersResponse, referralsResponse] = await Promise.all([
+            databases.listDocuments(DATABASE_ID, USERS_COLLECTION_ID),
+            databases.listDocuments(DATABASE_ID, REFERRALS_COLLECTION_ID)
         ]);
 
+        const activeUsers = usersResponse.documents.filter(
+            user => user.lastActive >= new Date(Date.now() - 24 * 60 * 60 * 1000)
+        ).length;
+
         const stats = {
-            totalUsers: totalUsers.data().count,
-            activeUsers: activeUsers.data().count,
-            totalGames: totalGames.data().count,
-            totalReferrals: totalReferrals.data().count
+            totalUsers: usersResponse.documents.length,
+            activeUsers: activeUsers,
+            totalReferrals: referralsResponse.documents.length
         };
 
         // Cache the results
@@ -220,4 +204,37 @@ async function getUserStats() {
         console.error('Error fetching user statistics:', error);
         throw error;
     }
-} 
+}
+
+/**
+ * @route GET /api/admin/users
+ * @desc Get all users with pagination
+ * @access Admin only
+ */
+router.get('/users', async (req, res) => {
+    try {
+        const { page = 1, limit = 10 } = req.query;
+        const data = await getUsers(parseInt(page), parseInt(limit));
+        res.status(200).json(data);
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ message: 'Error fetching users', error: error.message });
+    }
+});
+
+/**
+ * @route GET /api/admin/stats
+ * @desc Get admin statistics
+ * @access Admin only
+ */
+router.get('/stats', async (req, res) => {
+    try {
+        const stats = await getUserStats();
+        res.status(200).json(stats);
+    } catch (error) {
+        console.error('Error fetching admin statistics:', error);
+        res.status(500).json({ message: 'Error fetching admin statistics', error: error.message });
+    }
+});
+
+module.exports = router; 

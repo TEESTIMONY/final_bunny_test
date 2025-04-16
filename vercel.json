@@ -1,9 +1,15 @@
 {
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
-    { "source": "/profile", "destination": "/" },
-    { "source": "/profile.html", "destination": "/" },
-    { "source": "/:path+", "destination": "/:path+.html" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    }
   ]
 } 

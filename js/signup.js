@@ -1,3 +1,12 @@
+import config from './config/appwrite.js';
+
+// Use the global Appwrite object instead of importing
+const client = new Appwrite.Client()
+    .setEndpoint(config.endpoint)
+    .setProject(config.projectId);
+
+const account = new Appwrite.Account(client);
+
 // Function to extract referral code from URL
 function getURLParameter(name) {
     const urlParams = new URLSearchParams(window.location.search);
@@ -63,81 +72,78 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Modify the createUserWithEmailAndPassword function to process referrals
-// Add this after successful user creation
-firebase.auth().createUserWithEmailAndPassword(email, password)
-    .then((userCredential) => {
-        // Get the newly created user
-        const user = userCredential.user;
+// Handle form submission
+document.getElementById('signupForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const username = document.getElementById('username').value;
+    
+    try {
+        // Create user account in Appwrite
+        const user = await account.create(
+            Appwrite.ID.unique(),
+            email,
+            password,
+            username
+        );
         
-        // Create a user profile document in firestore
-        db.collection('users').doc(user.uid).set({
-            displayName: username,
-            email: email,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            score: 0,
-            gamesPlayed: 0,
-            avatarUrl: defaultAvatarUrl,
-            referralCount: 0  // Initialize referral count
-        })
-        .then(() => {
-            // Process referral if exists
-            const pendingReferral = localStorage.getItem('pendingReferral');
-            
-            if (pendingReferral) {
-                try {
-                    // Decode referral code
-                    const decodedRef = decodeURIComponent(atob(pendingReferral));
-                    const [referrerId, referrerName] = decodedRef.split(':');
-                    
-                    // Store the referral info for the auth.js to use
-                    sessionStorage.setItem('referrerId', referrerId);
-                    sessionStorage.setItem('referrerUsername', referrerName);
-                    console.log('Referral data stored in session for auth.js to process');
-                    
-                    /* 
-                    // Removed: We're now handling referrals in auth.js instead
-                    // Process the referral using our API
-                    const apiUrl = API_ENDPOINTS.referral;
-                    
-                    fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            referrerId: referrerId,
-                            newUserId: user.uid,
-                            newUsername: username
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Referral processed successfully:', data);
-                        // Clear the pending referral
-                        localStorage.removeItem('pendingReferral');
-                    })
-                    .catch(error => {
-                        console.error('Error processing referral:', error);
-                    });
-                    */
-                    
-                    // Clear the pending referral after storing the info
-                    localStorage.removeItem('pendingReferral');
-                } catch (error) {
-                    console.error('Error processing referral code:', error);
-                }
-            }
-            
-            // Redirect to the profile page or show success message
-            window.location.href = 'profile.html';
-        })
-        .catch((error) => {
-            console.error("Error creating user profile: ", error);
-            showError(error.message);
+        // Create user profile using our API
+        const response = await fetch(`${config.apiEndpoint}/users`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: user.$id,
+                email: email,
+                username: username,
+                displayName: username,
+                score: 0,
+                gamesPlayed: 0,
+                referralCount: 0,
+                createdAt: new Date().toISOString()
+            })
         });
-    })
-    .catch((error) => {
-        console.error("Error creating user: ", error);
+
+        if (!response.ok) {
+            throw new Error('Failed to create user profile');
+        }
+
+        // Process referral if exists
+        const pendingReferral = localStorage.getItem('pendingReferral');
+        if (pendingReferral) {
+            try {
+                // Decode referral code
+                const decodedRef = decodeURIComponent(atob(pendingReferral));
+                const [referrerId, referrerName] = decodedRef.split(':');
+                
+                // Store the referral info for processing after login
+                sessionStorage.setItem('referrerId', referrerId);
+                sessionStorage.setItem('referrerUsername', referrerName);
+                
+                // Clear the pending referral after storing the info
+                localStorage.removeItem('pendingReferral');
+            } catch (error) {
+                console.error('Error processing referral code:', error);
+            }
+        }
+
+        // Create a session
+        await account.createEmailSession(email, password);
+        
+        // Redirect to profile page
+        window.location.href = 'profile.html';
+        
+    } catch (error) {
+        console.error('Error during signup:', error);
         showError(error.message);
-    }); 
+    }
+});
+
+function showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+} 

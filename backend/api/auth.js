@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth, db } = require('../config/firebase');
+const { account, databases, DATABASE_ID, USERS_COLLECTION_ID, REFERRALS_COLLECTION_ID } = require('../config/appwrite');
 const axios = require('axios');
 
 /**
@@ -22,25 +22,23 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Please provide email, password, and username' });
     }
 
-    // Create user with Firebase Auth
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: username
-    });
-
-    // Create user document in Firestore
-    await db.collection('users').doc(userRecord.uid).set({
-      email,
-      username,
-      displayName: username,
-      score: 0,
-      highScore: 0,
-      createdAt: new Date().toISOString()
-    });
-
-    // Generate a custom token for the client
-    const token = await auth.createCustomToken(userRecord.uid);
+    // Create user with Appwrite
+    const user = await account.create('unique()', email, password, username);
+    
+    // Create user document in Appwrite Database
+    await databases.createDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      user.$id,
+      {
+        email,
+        username,
+        displayName: username,
+        score: 0,
+        highScore: 0,
+        createdAt: new Date().toISOString()
+      }
+    );
 
     // Process referral if provided
     let referralBonus = 0;
@@ -51,55 +49,54 @@ router.post('/register', async (req, res) => {
         const NEW_USER_POINTS = 200;
 
         // Update referrer's points
-        const referrerRef = db.collection('users').doc(referrerId);
-        const referrerDoc = await referrerRef.get();
+        const referrerDoc = await databases.getDocument(
+          DATABASE_ID,
+          USERS_COLLECTION_ID,
+          referrerId
+        );
         
-        if (referrerDoc.exists) {
-          const referrerData = referrerDoc.data();
-          console.log(`Processing referral: Referrer ${referrerData.username || referrerId} (current score: ${referrerData.score || 0}) will get ${REFERRER_POINTS} points`);
+        if (referrerDoc) {
+          console.log(`Processing referral: Referrer ${referrerDoc.username || referrerId} (current score: ${referrerDoc.score || 0}) will get ${REFERRER_POINTS} points`);
           
-          await referrerRef.update({
-            score: (referrerData.score || 0) + REFERRER_POINTS,
-            referralBonus: (referrerData.referralBonus || 0) + REFERRER_POINTS
-          });
+          await databases.updateDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            referrerId,
+            {
+              score: (referrerDoc.score || 0) + REFERRER_POINTS,
+              referralBonus: (referrerDoc.referralBonus || 0) + REFERRER_POINTS
+            }
+          );
           
-          console.log(`Updated referrer score: ${(referrerData.score || 0) + REFERRER_POINTS} (+${REFERRER_POINTS} points)`);
-          // Verify the update was successful by getting the updated document
-          const updatedReferrerDoc = await referrerRef.get();
-          const updatedReferrerData = updatedReferrerDoc.data();
-          console.log(`VERIFICATION - Referrer new score: ${updatedReferrerData.score}, Referral count: ${updatedReferrerData.referralCount}`);
-
           // Update new user's points
-          const newUserRef = db.collection('users').doc(userRecord.uid);
-          const newUserDoc = await newUserRef.get();
-          const newUserData = newUserDoc.data();
-          
-          console.log(`New user ${username} (current score: ${newUserData.score || 0}) will get ${NEW_USER_POINTS} points`);
-          
-          await newUserRef.update({
-            score: (newUserData.score || 0) + NEW_USER_POINTS,
-            referralBonus: (newUserData.referralBonus || 0) + NEW_USER_POINTS
-          });
-          
-          console.log(`Updated new user score: ${(newUserData.score || 0) + NEW_USER_POINTS} (+${NEW_USER_POINTS} points)`);
-          // Verify the update was successful by getting the updated document
-          const updatedNewUserDoc = await newUserRef.get();
-          const updatedNewUserData = updatedNewUserDoc.data();
-          console.log(`VERIFICATION - New user score: ${updatedNewUserData.score}, Referral bonus: ${updatedNewUserData.referralBonus}`);
+          await databases.updateDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            user.$id,
+            {
+              score: NEW_USER_POINTS,
+              referralBonus: NEW_USER_POINTS
+            }
+          );
 
           // Record the referral
-          await db.collection('referrals').add({
-            referrerId: referrerId,
-            referrerName: referrerData.username || referrerUsername,
-            newUserId: userRecord.uid,
-            newUserName: username,
-            referrerPointsAwarded: REFERRER_POINTS,
-            newUserPointsAwarded: NEW_USER_POINTS,
-            createdAt: new Date().toISOString()
-          });
+          await databases.createDocument(
+            DATABASE_ID,
+            REFERRALS_COLLECTION_ID,
+            'unique()',
+            {
+              referrerId: referrerId,
+              referrerName: referrerDoc.username || referrerUsername,
+              newUserId: user.$id,
+              newUserName: username,
+              referrerPointsAwarded: REFERRER_POINTS,
+              newUserPointsAwarded: NEW_USER_POINTS,
+              createdAt: new Date().toISOString()
+            }
+          );
 
           referralBonus = NEW_USER_POINTS;
-          console.log(`Referral processed: ${referrerId} (awarded ${REFERRER_POINTS} pts) referred ${userRecord.uid} (awarded ${NEW_USER_POINTS} pts)`);
+          console.log(`Referral processed: ${referrerId} (awarded ${REFERRER_POINTS} pts) referred ${user.$id} (awarded ${NEW_USER_POINTS} pts)`);
         }
       } catch (referralError) {
         console.error('Error processing referral:', referralError);
@@ -107,15 +104,18 @@ router.post('/register', async (req, res) => {
       }
     }
 
+    // Create session for the new user
+    const session = await account.createSession(email, password);
+
     res.status(201).json({
       message: 'User registered successfully',
-      token,
-      userId: userRecord.uid,
+      token: session.secret,
+      userId: user.$id,
       referralBonus,
       user: {
-        uid: userRecord.uid,
-        email: userRecord.email,
-        displayName: userRecord.displayName
+        uid: user.$id,
+        email: user.email,
+        displayName: user.name
       }
     });
     
@@ -123,16 +123,15 @@ router.post('/register', async (req, res) => {
   } catch (error) {
     console.error('Error registering user:', error);
     
-    // Handle Firebase Auth specific errors
-    if (error.code === 'auth/email-already-exists') {
+    if (error.type === 'user_already_exists') {
       return res.status(400).json({ message: 'Email already in use' });
     }
     
-    if (error.code === 'auth/invalid-email') {
+    if (error.type === 'invalid_email') {
       return res.status(400).json({ message: 'Invalid email format' });
     }
     
-    if (error.code === 'auth/weak-password') {
+    if (error.type === 'invalid_password') {
       return res.status(400).json({ message: 'Password is too weak' });
     }
     
@@ -153,63 +152,39 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Please provide email and password' });
     }
 
-    // Use Firebase REST API to authenticate with email and password
-    try {
-      // Get Firebase API Key from environment variable
-      const apiKey = process.env.FIREBASE_API_KEY;
-      
-      if (!apiKey) {
-        throw new Error('Firebase API key is not configured');
+    // Create session with Appwrite
+    const session = await account.createSession(email, password);
+    const user = await account.get();
+
+    // Get user data from Appwrite Database
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      user.$id
+    );
+    
+    res.status(200).json({
+      message: 'Login successful',
+      token: session.secret,
+      userId: user.$id,
+      score: userDoc?.score || 0,
+      highScore: userDoc?.highScore || 0,
+      referralCount: userDoc?.referralCount || 0,
+      referralBonus: userDoc?.referralBonus || 0,
+      user: {
+        uid: user.$id,
+        email: user.email,
+        displayName: user.name || userDoc?.username,
+        highScore: userDoc?.highScore || 0,
+        score: userDoc?.score || 0,
+        referralCount: userDoc?.referralCount || 0,
+        referralBonus: userDoc?.referralBonus || 0
       }
-      
-      // Call Firebase Auth REST API
-      const response = await axios.post(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-        {
-          email,
-          password,
-          returnSecureToken: true
-        }
-      );
-      
-      const userData = response.data;
-      const uid = userData.localId;
-      
-      // Get user data from Firestore
-      const userDoc = await db.collection('users').doc(uid).get();
-      const userRecord = await auth.getUser(uid);
-      const firestoreData = userDoc.data() || {};
-      
-      // Create a custom token for the client
-      const token = await auth.createCustomToken(uid);
-      
-      res.status(200).json({
-        message: 'Login successful',
-        token,
-        userId: uid,
-        score: firestoreData?.score || 0,
-        highScore: firestoreData?.highScore || 0,
-        referralCount: firestoreData?.referralCount || 0,
-        referralBonus: firestoreData?.referralBonus || 0,
-        user: {
-          uid: uid,
-          email: userRecord.email,
-          displayName: userRecord.displayName || firestoreData?.username,
-          highScore: firestoreData?.highScore || 0,
-          score: firestoreData?.score || 0,
-          referralCount: firestoreData?.referralCount || 0,
-          referralBonus: firestoreData?.referralBonus || 0
-        }
-      });
-    } catch (authError) {
-      console.error('Firebase authentication error:', authError.response?.data || authError);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    });
   } catch (error) {
     console.error('Error logging in:', error);
     
-    // Handle Firebase Auth specific errors
-    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+    if (error.type === 'user_not_found' || error.type === 'invalid_credentials') {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
@@ -219,7 +194,7 @@ router.post('/login', async (req, res) => {
 
 /**
  * @route POST /api/auth/verify-token
- * @desc Verify a Firebase ID token
+ * @desc Verify an Appwrite session
  * @access Public
  */
 router.post('/verify-token', async (req, res) => {
@@ -230,25 +205,28 @@ router.post('/verify-token', async (req, res) => {
       return res.status(400).json({ message: 'No token provided' });
     }
     
-    // Verify the ID token
-    const decodedToken = await auth.verifyIdToken(token);
-    const uid = decodedToken.uid;
+    // Verify the session
+    const session = await account.getSession(token);
+    const user = await account.get();
     
-    // Get user data
-    const userRecord = await auth.getUser(uid);
-    
-    // Get additional user data from Firestore
-    const userDoc = await db.collection('users').doc(uid).get();
-    const userData = userDoc.data() || {};
+    // Get additional user data from Appwrite Database
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      user.$id
+    );
     
     res.status(200).json({
       message: 'Token is valid',
-      userId: uid,
+      userId: user.$id,
       user: {
-        uid: userRecord.uid,
-        email: userRecord.email,
-        displayName: userRecord.displayName || userData.username,
-        highScore: userData.highScore || 0
+        uid: user.$id,
+        email: user.email,
+        displayName: user.name || userDoc?.username,
+        highScore: userDoc?.highScore || 0,
+        score: userDoc?.score || 0,
+        referralCount: userDoc?.referralCount || 0,
+        referralBonus: userDoc?.referralBonus || 0
       }
     });
   } catch (error) {

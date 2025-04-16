@@ -1,8 +1,8 @@
-const { auth } = require('../config/firebase');
+const { account } = require('../config/appwrite');
 
 /**
- * Middleware to verify Firebase auth token
- * Attaches the decoded user to the request object if successful
+ * Middleware to verify Appwrite session
+ * Attaches the user to the request object if successful
  */
 const verifyToken = async (req, res, next) => {
   try {
@@ -15,9 +15,14 @@ const verifyToken = async (req, res, next) => {
     const token = authHeader.split('Bearer ')[1];
     
     try {
-      // Verify the ID token
-      const decodedToken = await auth.verifyIdToken(token);
-      req.user = decodedToken;
+      // Verify the session
+      const session = await account.getSession(token);
+      const user = await account.get();
+      req.user = {
+        uid: user.$id,
+        email: user.email,
+        name: user.name
+      };
       next();
     } catch (error) {
       console.error('Error verifying token:', error);

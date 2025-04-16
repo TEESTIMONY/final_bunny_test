@@ -19,6 +19,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Import Appwrite configuration
+require('./config/appwrite');
+
 // Routes
 app.use('/api/auth', require('./api/auth'));
 app.use('/api/user', require('./api/user'));

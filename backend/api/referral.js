@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth, db } = require('../config/firebase');
+const { databases, DATABASE_ID, USERS_COLLECTION_ID, REFERRALS_COLLECTION_ID } = require('../config/appwrite');
 const { verifyToken } = require('../middleware/auth');
 
 // Add caching for referral data
@@ -35,43 +35,49 @@ async function checkReferral(userId) {
     }
 
     try {
-        const referralRef = db.collection('referrals').doc(userId);
-        const referralDoc = await referralRef.get();
+        const referralDoc = await databases.getDocument(
+            DATABASE_ID,
+            REFERRALS_COLLECTION_ID,
+            userId
+        );
 
-        if (!referralDoc.exists) {
+        if (!referralDoc) {
             referralCache.set(userId, null);
             return null;
         }
 
-        const data = referralDoc.data();
-        referralCache.set(userId, data);
-        return data;
+        referralCache.set(userId, referralDoc);
+        return referralDoc;
     } catch (error) {
         console.error('Error checking referral:', error);
         throw error;
     }
 }
 
-// Modify processReferral to use batch operations
+// Modify processReferral to use Appwrite
 async function processReferral(referrerId, referredId) {
-    const batch = db.batch();
-    
     try {
         // Check if referral already exists
-        const existingRef = db.collection('referrals').doc(referredId);
-        const existingDoc = await existingRef.get();
+        const existingReferral = await databases.listDocuments(
+            DATABASE_ID,
+            REFERRALS_COLLECTION_ID,
+            [
+                `equal("referrerId", "${referrerId}")`,
+                `equal("referredId", "${referredId}")`
+            ]
+        );
         
-        if (existingDoc.exists) {
+        if (existingReferral.documents.length > 0) {
             throw new Error('Referral already processed');
         }
 
         // Get both users' data in parallel
         const [referrerDoc, referredDoc] = await Promise.all([
-            db.collection('users').doc(referrerId).get(),
-            db.collection('users').doc(referredId).get()
+            databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, referrerId),
+            databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, referredId)
         ]);
 
-        if (!referrerDoc.exists || !referredDoc.exists) {
+        if (!referrerDoc || !referredDoc) {
             throw new Error('One or both users not found');
         }
 
@@ -79,21 +85,27 @@ async function processReferral(referrerId, referredId) {
         const referralData = {
             referrerId,
             referredId,
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
             status: 'pending'
         };
 
-        // Add referral to batch
-        batch.set(existingRef, referralData);
+        // Create referral document
+        const referralDoc = await databases.createDocument(
+            DATABASE_ID,
+            REFERRALS_COLLECTION_ID,
+            'unique()',
+            referralData
+        );
 
         // Update referrer's referral count
-        const referrerData = referrerDoc.data();
-        batch.update(referrerDoc.ref, {
-            referralCount: (referrerData.referralCount || 0) + 1
-        });
-
-        // Commit the batch
-        await batch.commit();
+        await databases.updateDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            referrerId,
+            {
+                referralCount: (referrerDoc.referralCount || 0) + 1
+            }
+        );
 
         // Update cache
         referralCache.set(referredId, referralData);
@@ -120,62 +132,72 @@ router.post('/', async (req, res) => {
     }
     
     // Check if users exist
-    const referrerRef = db.collection('users').doc(referrerId);
-    const referredRef = db.collection('users').doc(referredId);
-    
     const [referrerDoc, referredDoc] = await Promise.all([
-      referrerRef.get(),
-      referredRef.get()
+      databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, referrerId),
+      databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, referredId)
     ]);
     
-    if (!referrerDoc.exists) {
+    if (!referrerDoc) {
       return res.status(404).json({ message: 'Referrer user not found' });
     }
     
-    if (!referredDoc.exists) {
+    if (!referredDoc) {
       return res.status(404).json({ message: 'Referred user not found' });
     }
     
-    // Get current user data
-    const referrerData = referrerDoc.data();
-    const referredData = referredDoc.data();
-    
     // Check if this referral has already been processed
-    const referralsCollection = db.collection('referrals');
-    const existingReferral = await referralsCollection
-      .where('referrerId', '==', referrerId)
-      .where('referredId', '==', referredId)
-      .get();
+    const existingReferral = await databases.listDocuments(
+      DATABASE_ID,
+      REFERRALS_COLLECTION_ID,
+      [
+        `equal("referrerId", "${referrerId}")`,
+        `equal("referredId", "${referredId}")`
+      ]
+    );
     
-    if (!existingReferral.empty) {
+    if (existingReferral.documents.length > 0) {
       return res.status(400).json({ message: 'This referral has already been processed' });
     }
     
     // Update referrer: add 500 points to score and track referral count
-    await referrerRef.update({
-      score: (referrerData.score || 0) + 500,
-      // NOTE: referralCount is not incremented here - that's now handled by update-score.js with the incrementReferralCount flag
-      referralBonus: (referrerData.referralBonus || 0) + 500,
-      updatedAt: new Date().toISOString()
-    });
+    await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      referrerId,
+      {
+        score: (referrerDoc.score || 0) + 500,
+        referralBonus: (referrerDoc.referralBonus || 0) + 500,
+        updatedAt: new Date().toISOString()
+      }
+    );
     
     // Update referred user: add 200 points to their score
-    await referredRef.update({
-      score: (referredData.score || 0) + 200,
-      referralBonus: (referredData.referralBonus || 0) + 200,
-      updatedAt: new Date().toISOString()
-    });
+    await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      referredId,
+      {
+        score: (referredDoc.score || 0) + 200,
+        referralBonus: (referredDoc.referralBonus || 0) + 200,
+        updatedAt: new Date().toISOString()
+      }
+    );
     
     // Record the referral to prevent duplicates
-    await referralsCollection.add({
-      referrerId: referrerId,
-      referredId: referredId,
-      referrerUsername: referrerData.username,
-      referredUsername: referredData.username,
-      referrerBonus: 500,
-      referredBonus: 200,
-      processedAt: new Date().toISOString()
-    });
+    await databases.createDocument(
+      DATABASE_ID,
+      REFERRALS_COLLECTION_ID,
+      'unique()',
+      {
+        referrerId: referrerId,
+        referredId: referredId,
+        referrerUsername: referrerDoc.username,
+        referredUsername: referredDoc.username,
+        referrerBonus: 500,
+        referredBonus: 200,
+        processedAt: new Date().toISOString()
+      }
+    );
     
     console.log(`Referral processed: ${referrerId} referred ${referredId}`);
     
@@ -201,32 +223,29 @@ router.get('/stats/:userId', async (req, res) => {
     const { userId } = req.params;
     
     // Get user data
-    const userRef = db.collection('users').doc(userId);
-    const userDoc = await userRef.get();
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId
+    );
     
-    if (!userDoc.exists) {
+    if (!userDoc) {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    const userData = userDoc.data();
-    
     // Get referrals made by this user
-    const referralsQuery = await db.collection('referrals')
-      .where('referrerId', '==', userId)
-      .get();
-    
-    const referrals = [];
-    referralsQuery.forEach(doc => {
-      referrals.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
+    const referralsResponse = await databases.listDocuments(
+      DATABASE_ID,
+      REFERRALS_COLLECTION_ID,
+      [
+        `equal("referrerId", "${userId}")`
+      ]
+    );
     
     res.status(200).json({
-      referralCount: userData.referralCount || 0,
-      referralBonus: userData.referralBonus || 0,
-      referrals: referrals
+      referralCount: userDoc.referralCount || 0,
+      referralBonus: userDoc.referralBonus || 0,
+      referrals: referralsResponse.documents
     });
     
   } catch (error) {
@@ -249,82 +268,21 @@ router.post('/update-count', async (req, res) => {
       return res.status(400).json({ message: 'User ID is required' });
     }
     
-    if (referralCount === undefined || referralCount === null) {
-      return res.status(400).json({ message: 'Referral count is required' });
-    }
-    
-    // Make sure referral count is a number
-    const numericCount = parseInt(referralCount);
-    if (isNaN(numericCount)) {
-      return res.status(400).json({ message: 'Referral count must be a number' });
-    }
-    
-    // Get the user document
-    const userRef = db.collection('users').doc(userId);
-    const userDoc = await userRef.get();
-    
-    if (!userDoc.exists) {
-      return res.status(404).json({ message: 'User not found in database' });
-    }
-    
-    // Update the user's referral count
-    await userRef.update({
-      referralCount: numericCount,
-      updatedAt: new Date().toISOString()
-    });
-    
-    console.log(`Updated referral count for user ${userId} to ${numericCount}`);
-    
-    return res.status(200).json({
-      message: 'Referral count updated successfully',
+    // Update user's referral count
+    await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
       userId,
-      referralCount: numericCount
-    });
+      {
+        referralCount: referralCount || 0,
+        updatedAt: new Date().toISOString()
+      }
+    );
     
+    res.status(200).json({ message: 'Referral count updated successfully' });
   } catch (error) {
     console.error('Error updating referral count:', error);
-    
-    if (error.code === 'auth/user-not-found') {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
     res.status(500).json({ message: 'Error updating referral count', error: error.message });
-  }
-});
-
-/**
- * @route GET /api/referral/count/:userId
- * @desc Get a user's referral count
- * @access Public
- */
-router.get('/count/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    // Get the user document
-    const userRef = db.collection('users').doc(userId);
-    const userDoc = await userRef.get();
-    
-    if (!userDoc.exists) {
-      return res.status(404).json({ message: 'User not found in database' });
-    }
-    
-    const userData = userDoc.data();
-    const referralCount = userData.referralCount || 0;
-    
-    return res.status(200).json({
-      userId,
-      referralCount
-    });
-    
-  } catch (error) {
-    console.error('Error getting referral count:', error);
-    
-    if (error.code === 'auth/user-not-found') {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    res.status(500).json({ message: 'Error getting referral count', error: error.message });
   }
 });
 

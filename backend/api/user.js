@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth, db } = require('../config/firebase');
+const { account, databases, DATABASE_ID, USERS_COLLECTION_ID } = require('../config/appwrite');
 const { verifyToken } = require('../middleware/auth');
 
 /**
@@ -10,13 +10,7 @@ function formatTimestamp(timestamp) {
   if (!timestamp) return null;
   
   let date;
-  if (timestamp._seconds) {
-    // Firestore Timestamp format
-    date = new Date(timestamp._seconds * 1000);
-  } else if (timestamp.seconds) {
-    // Another possible Firestore format
-    date = new Date(timestamp.seconds * 1000);
-  } else if (typeof timestamp === 'string') {
+  if (typeof timestamp === 'string') {
     // ISO string format
     date = new Date(timestamp);
   } else {
@@ -45,33 +39,38 @@ router.get('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Get user data from Firebase Auth
-    const userRecord = await auth.getUser(userId);
+    // Get user data from Appwrite
+    const user = await account.get(userId);
     
-    // Get additional user data from Firestore
-    const userDoc = await db.collection('users').doc(userId).get();
+    // Get additional user data from Appwrite Database
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId
+    );
     
-    if (!userDoc.exists) {
+    if (!userDoc) {
       return res.status(404).json({ message: 'User not found in database' });
     }
     
-    const userData = userDoc.data();
-    
     // Get user rank if stored, or calculate it if not available
-    let userRank = userData.rank;
+    let userRank = userDoc.rank;
     
     if (userRank === undefined) {
       // Get all users sorted by highScore in descending order for rank calculation
-      const usersSnapshot = await db.collection('users')
-        .orderBy('highScore', 'desc')
-        .get();
+      const usersResponse = await databases.listDocuments(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        [
+          'orderDesc("highScore")'
+        ]
+      );
       
       let lastHighScore = Infinity;
       let currentRank = 0;
       
       // Iterate through users to determine rank
-      usersSnapshot.forEach(doc => {
-        const user = doc.data();
+      usersResponse.documents.forEach(user => {
         // If this is a new score tier, increment the rank
         if (user.highScore < lastHighScore) {
           currentRank++;
@@ -79,37 +78,42 @@ router.get('/:userId', async (req, res) => {
         }
         
         // If this is our user, save their rank
-        if (doc.id === userId) {
+        if (user.$id === userId) {
           userRank = currentRank;
         }
       });
       
       // Update the user's rank in database for future queries
-      await db.collection('users').doc(userId).update({ 
-        rank: userRank,
-        updatedAt: new Date().toISOString()
-      });
+      await databases.updateDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        userId,
+        { 
+          rank: userRank,
+          updatedAt: new Date().toISOString()
+        }
+      );
     }
     
     res.status(200).json({
-      uid: userRecord.uid,
-      email: userRecord.email,
-      displayName: userRecord.displayName || userData.username,
-      username: userData.username,
-      score: userData.score || userData.highScore || 0,
-      highScore: userData.highScore || 0,
-      lastGameScore: userData.lastGameScore || 0,
-      gamesPlayed: userData.gamesPlayed || 0,
+      uid: user.$id,
+      email: user.email,
+      displayName: user.name || userDoc.username,
+      username: userDoc.username,
+      score: userDoc.score || userDoc.highScore || 0,
+      highScore: userDoc.highScore || 0,
+      lastGameScore: userDoc.lastGameScore || 0,
+      gamesPlayed: userDoc.gamesPlayed || 0,
       rank: userRank || 999, // Default to a high rank if calculation failed
-      referralCount: userData.referralCount || 0, // Include referral count
-      referralBonus: userData.referralBonus || 0, // Include referral bonus points
-      createdAt: formatTimestamp(userData.createdAt)
+      referralCount: userDoc.referralCount || 0, // Include referral count
+      referralBonus: userDoc.referralBonus || 0, // Include referral bonus points
+      createdAt: formatTimestamp(userDoc.createdAt)
     });
     
   } catch (error) {
     console.error('Error getting user data:', error);
     
-    if (error.code === 'auth/user-not-found') {
+    if (error.type === 'user_not_found') {
       return res.status(404).json({ message: 'User not found' });
     }
     
@@ -132,60 +136,68 @@ router.put('/:userId', verifyToken, async (req, res) => {
       return res.status(403).json({ message: 'Forbidden: Cannot update other user data' });
     }
     
-    // Update object for Firestore
+    // Update object for Appwrite Database
     const updates = {};
     
-    // Update object for Auth
-    const authUpdates = {};
+    // Update object for Appwrite Account
+    const accountUpdates = {};
     
     if (displayName) {
       updates.displayName = displayName;
-      authUpdates.displayName = displayName;
+      accountUpdates.name = displayName;
     }
     
     if (username) {
       updates.username = username;
     }
     
-    // Update in Firebase Auth if needed
-    if (Object.keys(authUpdates).length > 0) {
-      await auth.updateUser(userId, authUpdates);
+    // Update in Appwrite Account if needed
+    if (Object.keys(accountUpdates).length > 0) {
+      await account.updateName(accountUpdates.name);
     }
     
-    // Update in Firestore
+    // Update in Appwrite Database
     if (Object.keys(updates).length > 0) {
-      await db.collection('users').doc(userId).update({
-        ...updates,
-        updatedAt: new Date().toISOString()
-      });
+      await databases.updateDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        userId,
+        {
+          ...updates,
+          updatedAt: new Date().toISOString()
+        }
+      );
     }
     
     // Get updated user data
-    const userRecord = await auth.getUser(userId);
-    const userDoc = await db.collection('users').doc(userId).get();
-    const userData = userDoc.data();
+    const user = await account.get(userId);
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId
+    );
     
     res.status(200).json({
       message: 'User updated successfully',
       user: {
-        uid: userRecord.uid,
-        email: userRecord.email,
-        displayName: userRecord.displayName || userData.username,
-        username: userData.username,
-        score: userData.score || userData.highScore || 0,
-        highScore: userData.highScore || 0,
-        lastGameScore: userData.lastGameScore || 0,
-        gamesPlayed: userData.gamesPlayed || 0,
-        referralCount: userData.referralCount || 0,
-        referralBonus: userData.referralBonus || 0,
-        createdAt: formatTimestamp(userData.createdAt)
+        uid: user.$id,
+        email: user.email,
+        displayName: user.name || userDoc.username,
+        username: userDoc.username,
+        score: userDoc.score || userDoc.highScore || 0,
+        highScore: userDoc.highScore || 0,
+        lastGameScore: userDoc.lastGameScore || 0,
+        gamesPlayed: userDoc.gamesPlayed || 0,
+        referralCount: userDoc.referralCount || 0,
+        referralBonus: userDoc.referralBonus || 0,
+        createdAt: formatTimestamp(userDoc.createdAt)
       }
     });
     
   } catch (error) {
     console.error('Error updating user:', error);
     
-    if (error.code === 'auth/user-not-found') {
+    if (error.type === 'user_not_found') {
       return res.status(404).json({ message: 'User not found' });
     }
     
