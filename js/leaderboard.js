@@ -25,6 +25,17 @@ const leaderboardCache = {
     set(data) {
         this.data = data;
         this.timestamp = Date.now();
+    },
+
+    async update() {
+        try {
+            const data = await fetchLeaderboardData();
+            if (data) {
+                this.set(data);
+            }
+        } catch (error) {
+            console.error('Error updating leaderboard cache:', error);
+        }
     }
 };
 
@@ -305,12 +316,32 @@ async function fetchLeaderboardData() {
             throw new Error('Failed to fetch leaderboard data');
         }
         
-        const data = await response.json();
+        const responseData = await response.json();
         
-        // Cache the data
-        leaderboardCache.set(data);
+        // Check if the response has a data or users property
+        const data = responseData.data || responseData.users || responseData;
         
-        return data;
+        // Ensure we have an array of users
+        if (!Array.isArray(data)) {
+            console.error('Unexpected API response format:', responseData);
+            throw new Error('Invalid API response format');
+        }
+        
+        // Map the data to ensure consistent format
+        const formattedData = data.map(user => ({
+            userId: user.userId || user.id || user._id,
+            username: user.username || user.displayName || 'Anonymous',
+            score: parseInt(user.score || user.highScore || 0),
+            gamesPlayed: parseInt(user.gamesPlayed || 0)
+        }));
+        
+        // Sort by score in descending order
+        formattedData.sort((a, b) => b.score - a.score);
+        
+        // Cache the formatted data
+        leaderboardCache.set(formattedData);
+        
+        return formattedData;
     } catch (error) {
         console.error('Error fetching leaderboard data:', error);
         return null;
@@ -685,5 +716,89 @@ async function fetchCurrentUserData(currentUserId) {
     } catch (error) {
         console.error('Error fetching current user data:', error);
         return null;
+    }
+}
+
+/**
+ * Load and display leaderboard data
+ */
+async function loadLeaderboardData() {
+    try {
+        // Show loading state
+        const leaderboardContainer = document.querySelector('.leaderboard-rows-container');
+        if (!leaderboardContainer) {
+            console.error('Leaderboard container not found');
+            return;
+        }
+
+        leaderboardContainer.innerHTML = `
+            <div class="leaderboard-loading">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <p>Loading leaderboard data...</p>
+            </div>
+        `;
+
+        // Fetch leaderboard data
+        const data = await fetchLeaderboardData();
+        if (!data || !Array.isArray(data) || data.length === 0) {
+            throw new Error('No leaderboard data available');
+        }
+
+        // Store all users globally for reference
+        window.allUsers = data;
+
+        // Clear the container
+        leaderboardContainer.innerHTML = '';
+
+        // Display each user in the leaderboard
+        data.forEach((user, index) => {
+            const rank = index + 1;
+            const row = document.createElement('div');
+            row.className = 'leaderboard-row';
+            
+            // Add special class for top 3
+            if (rank <= 3) {
+                row.classList.add(`rank-${rank}`);
+            }
+
+            // Add special class for current user
+            const currentUserId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+            if (user.userId === currentUserId) {
+                row.classList.add('current-user');
+            }
+
+            row.innerHTML = `
+                <div class="rank">
+                    ${rank <= 3 ? 
+                        `<i class="fas fa-trophy rank-${rank}"></i>` : 
+                        `#${rank}`
+                    }
+                </div>
+                <div class="player">
+                    <i class="fas fa-user"></i>
+                    ${user.username || 'Anonymous'}
+                </div>
+                <div class="score">
+                    <i class="fas fa-star"></i>
+                    ${formatNumber(user.score || 0)}
+                </div>
+            `;
+
+            leaderboardContainer.appendChild(row);
+        });
+
+    } catch (error) {
+        console.error('Error loading leaderboard data:', error);
+        const leaderboardContainer = document.querySelector('.leaderboard-rows-container');
+        if (leaderboardContainer) {
+            leaderboardContainer.innerHTML = `
+                <div class="error-row">
+                    <p>Failed to load leaderboard data. Please try again later.</p>
+                    <p class="error-details">${error.message}</p>
+                </div>
+            `;
+        }
     }
 } 
