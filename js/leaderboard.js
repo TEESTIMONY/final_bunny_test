@@ -9,6 +9,28 @@ const API_ENDPOINTS = {
     users: '/users'
 };
 
+// Add caching for leaderboard data
+const leaderboardCache = {
+    data: null,
+    timestamp: 0,
+    expirationTime: 5 * 60 * 1000, // 5 minutes
+
+    get() {
+        if (this.data && Date.now() - this.timestamp < this.expirationTime) {
+            return this.data;
+        }
+        return null;
+    },
+
+    set(data) {
+        this.data = data;
+        this.timestamp = Date.now();
+    }
+};
+
+// Start background updates
+setInterval(() => leaderboardCache.update(), 30 * 1000);
+
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize the leaderboard
     initLeaderboard();
@@ -262,342 +284,37 @@ function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/**
- * Fetch leaderboard data from the API
- */
-async function loadLeaderboardData() {
+// Modify fetchLeaderboardData to use caching
+async function fetchLeaderboardData() {
+    // Check cache first
+    const cachedData = leaderboardCache.get();
+    if (cachedData) {
+        console.log('Using cached leaderboard data');
+        return cachedData;
+    }
+
     try {
-        // Show loading state
-        const leaderboardTable = document.querySelector('.leaderboard-table');
-        if (leaderboardTable) {
-            // Clear the table first
-            leaderboardTable.innerHTML = '';
-            
-            // Create header row
-            const headerRow = document.createElement('div');
-            headerRow.className = 'leaderboard-row header';
-            headerRow.innerHTML = `
-                <div class="rank"><i class="fas fa-trophy"></i> RANK</div>
-                <div class="player"><i class="fas fa-user"></i> PLAYER</div>
-                <div class="score"><i class="fas fa-star"></i> SCORE</div>
-            `;
-            leaderboardTable.appendChild(headerRow);
-            
-            // Create scrollable container
-            const rowsContainer = document.createElement('div');
-            rowsContainer.className = 'leaderboard-rows-container';
-            leaderboardTable.appendChild(rowsContainer);
-            
-            // Add loading indicator
-            const loadingIndicator = document.createElement('div');
-            loadingIndicator.className = 'leaderboard-loading';
-            loadingIndicator.innerHTML = `
-                <div class="loading-spinner">
-                    <i class="fas fa-spinner fa-spin"></i>
-                </div>
-                <p>Loading leaderboard data...</p>
-            `;
-            rowsContainer.appendChild(loadingIndicator);
-        }
-        
-        // Fetch data from API with sort parameters - CHANGED: Sort by score instead of highScore
         const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.users}?sortBy=score&sortDir=desc&limit=400`, {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Content-Type': 'application/json'
             }
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+            throw new Error('Failed to fetch leaderboard data');
         }
         
         const data = await response.json();
-        console.log('API Response:', data);
         
-        if (!data || !data.users || !Array.isArray(data.users)) {
-            throw new Error('Invalid API response format');
-        }
+        // Cache the data
+        leaderboardCache.set(data);
         
-        const users = data.users;
-        
-        // Ensure all users have required fields
-        const validUsers = users.map(user => {
-            return {
-                userId: user.userId || user.uid || user._id || 'unknown',
-                username: user.username || user.displayName || 'Anonymous',
-                // FIXED: Use score instead of highScore as the primary field
-                score: typeof user.score === 'number' ? user.score : 
-                      (typeof user.highScore === 'number' ? user.highScore : 0),
-                gamesPlayed: user.gamesPlayed || 0,
-                createdAt: user.createdAt || new Date().toISOString()
-            };
-        });
-        
-        // Double-check sorting (in case API doesn't sort properly) - CHANGED: sort by score instead of highScore
-        const sortedUsers = validUsers.sort((a, b) => b.score - a.score);
-        
-        // Display users in leaderboard
-        displayLeaderboardData(sortedUsers);
-        
-        console.log('Leaderboard data loaded successfully', sortedUsers);
-        
-        // Store all users for reference (to find current user's rank)
-        window.allUsers = sortedUsers;
-        
-        return sortedUsers;
+        return data;
     } catch (error) {
-        console.error('Error loading leaderboard data:', error);
-        
-        // Display error in the UI
-        displayErrorMessage(`Failed to load leaderboard data: ${error.message}. Using sample data instead.`);
-        
-        // Load sample data if API fails
-        loadSampleUserData();
-        return [];
+        console.error('Error fetching leaderboard data:', error);
+        return null;
     }
-}
-
-/**
- * Load sample user data (for demo purposes)
- */
-function loadSampleUserData() {
-    console.log('Loading sample user data');
-    
-    // Create sample data for demonstration
-    const sampleUsers = [
-        {
-            userId: "PCwtU7YgdQbw13r24rNHj0ix5Xx1",
-            username: "Delo",
-            email: "testimonyalade191@gmail.com",
-            score: 5357,
-            gamesPlayed: 8,
-            createdAt: "2025-04-10T08:54:55.039Z"
-        },
-        {
-            userId: "jA8IwqYgdQbw13r24rNHj0ix5Xx2",
-            username: "PepeHop",
-            email: "pepe@example.com",
-            score: 3512,
-            gamesPlayed: 15,
-            createdAt: "2025-04-11T10:25:12.039Z"
-        },
-        {
-            userId: "K9PrT7YgdQbw13r24rNHj0ix5Xx3",
-            username: "BunnyMaster",
-            email: "bunny@example.com",
-            score: 4756,
-            gamesPlayed: 23,
-            createdAt: "2025-04-09T14:30:45.039Z"
-        },
-        {
-            userId: "M5QtW2YgdQbw13r24rNHj0ix5Xx4",
-            username: "HopKing",
-            email: "king@example.com",
-            score: 2421,
-            gamesPlayed: 12,
-            createdAt: "2025-04-12T09:15:22.039Z"
-        },
-        {
-            userId: "N7RsX4YgdQbw13r24rNHj0ix5Xx5",
-            username: "JumpQueen",
-            email: "queen@example.com",
-            score: 3689,
-            gamesPlayed: 19,
-            createdAt: "2025-04-08T11:45:33.039Z"
-        }
-    ];
-    
-    // Sort by score descending
-    const sortedUsers = sampleUsers.sort((a, b) => b.score - a.score);
-    
-    // Display users in leaderboard
-    displayLeaderboardData(sortedUsers);
-    
-    // Store for reference
-    window.allUsers = sortedUsers;
-}
-
-/**
- * Display leaderboard data in the table
- */
-function displayLeaderboardData(users) {
-    const leaderboardTable = document.querySelector('.leaderboard-table');
-    
-    // Clear the table first
-    leaderboardTable.innerHTML = '';
-    
-    // Create header row
-    const headerRow = document.createElement('div');
-    headerRow.className = 'leaderboard-row header';
-    headerRow.innerHTML = `
-        <div class="rank"><i class="fas fa-trophy"></i> RANK</div>
-        <div class="player"><i class="fas fa-user"></i> PLAYER</div>
-        <div class="score"><i class="fas fa-star"></i> SCORE</div>
-    `;
-    leaderboardTable.appendChild(headerRow);
-    
-    // Create scrollable container for the data rows
-    const rowsContainer = document.createElement('div');
-    rowsContainer.className = 'leaderboard-rows-container';
-    leaderboardTable.appendChild(rowsContainer);
-    
-    // Add user rows
-    users.forEach((user, index) => {
-        const rank = index + 1;
-        const row = document.createElement('div');
-        
-        // Add special class for top 3 players
-        if (rank === 1) {
-            row.className = 'leaderboard-row top-player gold';
-        } else if (rank === 2) {
-            row.className = 'leaderboard-row top-player silver';
-        } else if (rank === 3) {
-            row.className = 'leaderboard-row top-player bronze';
-        } else {
-            row.className = 'leaderboard-row';
-        }
-        
-        // Enhanced rank icons for top 3
-        let rankDisplay = '';
-        if (rank === 1) {
-            rankDisplay = `<i class="fas fa-crown gold-icon"></i> ${rank}`;
-        } else if (rank === 2) {
-            rankDisplay = `<i class="fas fa-medal silver-icon"></i> ${rank}`;
-        } else if (rank === 3) {
-            rankDisplay = `<i class="fas fa-award bronze-icon"></i> ${rank}`;
-        } else {
-            rankDisplay = `<i class="fas fa-hashtag"></i> ${rank}`;
-        }
-        
-        // Make player name non-clickable (or always go to the current user's profile)
-        const username = user.username || 'Anonymous';
-        const playerDisplay = `<span class="player-name">${username}</span>`;
-        
-        row.innerHTML = `
-            <div class="rank">${rankDisplay}</div>
-            <div class="player">${playerDisplay}</div>
-            <div class="score">${formatNumber(user.score)}</div>
-        `;
-        
-        // Add hover state and cursor pointer to show it's clickable
-        row.style.cursor = 'pointer';
-        
-        // Add click event to go to profile page (always showing current user)
-        row.addEventListener('click', () => {
-            window.location.href = 'profile.html';
-        });
-        
-        rowsContainer.appendChild(row);
-    });
-    
-    // Add CSS for player styling
-    addPlayerStyles();
-    
-    // Animate rows
-    animateLeaderboardRows();
-}
-
-/**
- * Add CSS styles for player names
- */
-function addPlayerStyles() {
-    // Check if styles have already been added
-    if (document.getElementById('player-styles')) {
-        return;
-    }
-    
-    // Create style element
-    const style = document.createElement('style');
-    style.id = 'player-styles';
-    
-    // Define styles for players
-    const css = `
-        .player-name {
-            color: inherit;
-            position: relative;
-            display: inline-block;
-            transition: all 0.2s ease;
-        }
-        
-        .leaderboard-row:hover .player-name {
-            color: #3498db;
-            transform: translateY(-1px);
-            text-shadow: 0 0 8px rgba(52, 152, 219, 0.6);
-        }
-        
-        .leaderboard-row {
-            transition: background-color 0.2s ease, transform 0.2s ease;
-        }
-        
-        .leaderboard-row:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
-        }
-    `;
-    
-    // Add the styles to the style element
-    style.textContent = css;
-    
-    // Append the style element to the head
-    document.head.appendChild(style);
-}
-
-/**
- * Display error message in the table
- */
-function displayErrorMessage(message) {
-    const leaderboardTable = document.querySelector('.leaderboard-table');
-    
-    // Clear the table first
-    leaderboardTable.innerHTML = '';
-    
-    // Create header row
-    const headerRow = document.createElement('div');
-    headerRow.className = 'leaderboard-row header';
-    headerRow.innerHTML = `
-        <div class="rank"><i class="fas fa-trophy"></i> RANK</div>
-        <div class="player"><i class="fas fa-user"></i> PLAYER</div>
-        <div class="score"><i class="fas fa-star"></i> SCORE</div>
-    `;
-    leaderboardTable.appendChild(headerRow);
-    
-    // Create scrollable container
-    const rowsContainer = document.createElement('div');
-    rowsContainer.className = 'leaderboard-rows-container';
-    leaderboardTable.appendChild(rowsContainer);
-    
-    // Create error message row
-    const errorRow = document.createElement('div');
-    errorRow.className = 'leaderboard-row error-row';
-    errorRow.innerHTML = `
-        <div class="error-message" style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #ff6b6b;">
-            <i class="fas fa-exclamation-triangle"></i> ${message}
-        </div>
-    `;
-    
-    rowsContainer.appendChild(errorRow);
-}
-
-/**
- * Animate the leaderboard rows on load
- */
-function animateLeaderboardRows() {
-    const rows = document.querySelectorAll('.leaderboard-rows-container .leaderboard-row');
-    
-    rows.forEach((row, index) => {
-        // Add initial hidden state
-        row.style.opacity = '0';
-        row.style.transform = 'translateX(-20px)';
-        
-        // Animate in with delay based on index
-        setTimeout(() => {
-            row.style.transition = 'all 0.3s ease';
-            row.style.opacity = '1';
-            row.style.transform = 'translateX(0)';
-        }, 100 + (index * 50));
-    });
 }
 
 /**
@@ -925,4 +642,48 @@ function updateRankingWithAnimation(playerId, oldRank, newRank) {
     // 3. Update the rank number
     
     console.log(`Player ${playerId} moved from rank ${oldRank} to ${newRank}`);
+}
+
+// Modify the fetchUserRank function to use cached data
+async function fetchUserRank(userId) {
+    const leaderboardData = await fetchLeaderboardData();
+    if (!leaderboardData) return null;
+
+    const userIndex = leaderboardData.findIndex(user => user.id === userId);
+    return userIndex >= 0 ? userIndex + 1 : null;
+}
+
+// Modify the fetchCurrentUserData function to use the global cache
+async function fetchCurrentUserData(currentUserId) {
+    // Check the global user data cache first
+    const cachedData = window.userDataCache?.get(currentUserId);
+    if (cachedData) {
+        console.log('Using cached user data for current user');
+        return cachedData;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/user/${currentUserId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch current user data');
+        }
+
+        const data = await response.json();
+        
+        // Cache the data if the cache exists
+        if (window.userDataCache) {
+            window.userDataCache.set(currentUserId, data);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('Error fetching current user data:', error);
+        return null;
+    }
 } 

@@ -3,6 +3,108 @@ const router = express.Router();
 const { auth, db } = require('../config/firebase');
 const { verifyToken } = require('../middleware/auth');
 
+// Add caching for referral data
+const referralCache = {
+    data: new Map(),
+    timestamp: 0,
+    expirationTime: 5 * 60 * 1000, // 5 minutes
+
+    get(userId) {
+        const cachedData = this.data.get(userId);
+        if (cachedData && Date.now() - cachedData.timestamp < this.expirationTime) {
+            return cachedData.data;
+        }
+        return null;
+    },
+
+    set(userId, data) {
+        this.data.set(userId, {
+            data,
+            timestamp: Date.now()
+        });
+    }
+};
+
+// Modify checkReferral to use caching
+async function checkReferral(userId) {
+    // Check cache first
+    const cachedData = referralCache.get(userId);
+    if (cachedData) {
+        console.log('Using cached referral data for user:', userId);
+        return cachedData;
+    }
+
+    try {
+        const referralRef = db.collection('referrals').doc(userId);
+        const referralDoc = await referralRef.get();
+
+        if (!referralDoc.exists) {
+            referralCache.set(userId, null);
+            return null;
+        }
+
+        const data = referralDoc.data();
+        referralCache.set(userId, data);
+        return data;
+    } catch (error) {
+        console.error('Error checking referral:', error);
+        throw error;
+    }
+}
+
+// Modify processReferral to use batch operations
+async function processReferral(referrerId, referredId) {
+    const batch = db.batch();
+    
+    try {
+        // Check if referral already exists
+        const existingRef = db.collection('referrals').doc(referredId);
+        const existingDoc = await existingRef.get();
+        
+        if (existingDoc.exists) {
+            throw new Error('Referral already processed');
+        }
+
+        // Get both users' data in parallel
+        const [referrerDoc, referredDoc] = await Promise.all([
+            db.collection('users').doc(referrerId).get(),
+            db.collection('users').doc(referredId).get()
+        ]);
+
+        if (!referrerDoc.exists || !referredDoc.exists) {
+            throw new Error('One or both users not found');
+        }
+
+        // Create referral record
+        const referralData = {
+            referrerId,
+            referredId,
+            timestamp: new Date(),
+            status: 'pending'
+        };
+
+        // Add referral to batch
+        batch.set(existingRef, referralData);
+
+        // Update referrer's referral count
+        const referrerData = referrerDoc.data();
+        batch.update(referrerDoc.ref, {
+            referralCount: (referrerData.referralCount || 0) + 1
+        });
+
+        // Commit the batch
+        await batch.commit();
+
+        // Update cache
+        referralCache.set(referredId, referralData);
+
+        return referralData;
+    } catch (error) {
+        console.error('Error processing referral:', error);
+        throw error;
+    }
+}
+
 /**
  * @route POST /api/referral
  * @desc Process a referral: Award 500 points to referrer and 200 points to referred user

@@ -399,10 +399,17 @@ class Game {
             console.log('User not identified, using local high score');
             return;
         }
+
+        // Check if we have cached data
+        const cachedData = window.userDataCache?.get(userId);
+        if (cachedData) {
+            console.log('Using cached user data for game');
+            this.updateGameMetrics(cachedData);
+            return;
+        }
         
         // Fetch high score from backend
         try {
-            // Use the correct API endpoint with the new domain, without authentication
             fetch(`https://final-backend-test.vercel.app/api/user/${userId}`, {
                 method: 'GET',
                 headers: {
@@ -410,50 +417,18 @@ class Game {
                 }
             })
             .then(response => {
-                // Check if response is JSON
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    return response.json().then(data => {
-                        if (!response.ok) {
-                            throw new Error(data.message || 'Failed to fetch user data');
-                        }
-                        return data;
-                    });
-                } else {
-                    // Handle non-JSON response
-                    return response.text().then(text => {
-                        console.error('Server returned non-JSON response:', text.substring(0, 100) + '...');
-                        throw new Error('Server returned an invalid response format');
-                    });
+                if (!response.ok) {
+                    throw new Error('Failed to fetch user data');
                 }
+                return response.json();
             })
             .then(data => {
                 console.log('User data fetched:', data);
+                this.updateGameMetrics(data);
                 
-                // Update score metrics with server data
-                    
-                // Update high score (the highest single game score)
-                if (data.highScore !== undefined && !isNaN(data.highScore)) {
-                    const serverHighScore = parseInt(data.highScore);
-                    console.log('Received highest single game score from server:', serverHighScore);
-                    this.highScore = serverHighScore;
-                    localStorage.setItem('highScore', this.highScore);
-                }
-                
-                // Update total cumulative score
-                if (data.score !== undefined && !isNaN(data.score)) {
-                    const serverTotalScore = parseInt(data.score);
-                    console.log('Received total cumulative score from server:', serverTotalScore);
-                    this.totalScore = serverTotalScore;
-                    localStorage.setItem('totalScore', this.totalScore);
-                }
-                
-                // Update games played
-                if (data.gamesPlayed !== undefined && !isNaN(data.gamesPlayed)) {
-                    const serverGamesPlayed = parseInt(data.gamesPlayed);
-                    console.log('Received games played from server:', serverGamesPlayed);
-                    this.gamesPlayed = serverGamesPlayed;
-                    localStorage.setItem('gamesPlayed', this.gamesPlayed);
+                // Cache the data if the cache exists
+                if (window.userDataCache) {
+                    window.userDataCache.set(userId, data);
                 }
             })
             .catch(error => {
@@ -462,6 +437,35 @@ class Game {
             });
         } catch (error) {
             console.error('Error setting up fetch request:', error);
+        }
+    }
+    
+    /**
+     * Update game metrics from user data
+     */
+    updateGameMetrics(data) {
+        // Update high score (the highest single game score)
+        if (data.highScore !== undefined && !isNaN(data.highScore)) {
+            const serverHighScore = parseInt(data.highScore);
+            console.log('Received highest single game score from server:', serverHighScore);
+            this.highScore = serverHighScore;
+            localStorage.setItem('highScore', this.highScore);
+        }
+        
+        // Update total cumulative score
+        if (data.score !== undefined && !isNaN(data.score)) {
+            const serverTotalScore = parseInt(data.score);
+            console.log('Received total cumulative score from server:', serverTotalScore);
+            this.totalScore = serverTotalScore;
+            localStorage.setItem('totalScore', this.totalScore);
+        }
+        
+        // Update games played
+        if (data.gamesPlayed !== undefined && !isNaN(data.gamesPlayed)) {
+            const serverGamesPlayed = parseInt(data.gamesPlayed);
+            console.log('Received games played from server:', serverGamesPlayed);
+            this.gamesPlayed = serverGamesPlayed;
+            localStorage.setItem('gamesPlayed', this.gamesPlayed);
         }
     }
     

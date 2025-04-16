@@ -97,65 +97,75 @@ async function initProfile() {
  */
 function loadUserInfo() {
     // Get user info from localStorage or sessionStorage
-    let username = localStorage.getItem('username') || sessionStorage.getItem('username');
     const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const username = localStorage.getItem('username') || sessionStorage.getItem('username');
+    const score = localStorage.getItem('score') || sessionStorage.getItem('score');
     
-    // First try to show localStorage data while we fetch the latest
-    const cachedScore = localStorage.getItem('highScore') || sessionStorage.getItem('highScore') || 0;
-    
-    // Update the UI elements with cached data first
+    // Update UI with stored values
     if (username) {
-        // Check if the username looks like an email (contains @)
-        const isEmail = username.includes('@');
-        
-        // Temporarily set the username
-        currentUsername.textContent = isEmail ? username.split('@')[0] : username;
-        currentUserScore.textContent = formatNumber(cachedScore);
-        
-        // If we have a userId, we can try to fetch the latest score and proper username
-        if (userId) {
-            // Fetch the latest score from the API
-            const userEndpoint = API_ENDPOINTS.userProfile.replace('{userId}', userId);
-            fetch(`${API_BASE_URL}${userEndpoint}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to fetch user data');
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('User data fetched for header:', data);
-                
-                // Update the score display with the latest from the database
-                if (data.score !== undefined && !isNaN(data.score)) {
-                    const dbScore = parseInt(data.score);
-                    currentUserScore.textContent = formatNumber(dbScore);
-                }
-                
-                // Use the proper display name or username from the API
-                if (data.displayName || data.username) {
-                    const properUsername = data.displayName || data.username;
-                    console.log('Using proper username from API:', properUsername);
-                    currentUsername.textContent = properUsername;
-                    
-                    // Update localStorage and sessionStorage with the proper username
-                    localStorage.setItem('username', properUsername);
-                    sessionStorage.setItem('username', properUsername);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching user header data:', error);
-                // If there's an error, we'll keep showing the cached score
-            });
+        currentUsername.textContent = username;
+    }
+    if (score) {
+        currentUserScore.textContent = formatNumber(parseInt(score));
+    }
+    
+    // If we have a userId, we can try to fetch the latest score and proper username
+    if (userId) {
+        // Check cache first
+        const cachedData = window.userDataCache?.get(userId);
+        if (cachedData) {
+            console.log('Using cached user data for profile');
+            updateProfileFromData(cachedData);
+            return;
         }
-    } else {
-        currentUsername.textContent = "Guest Player";
-        currentUserScore.textContent = "0";
+
+        // Fetch the latest score from the API
+        const userEndpoint = API_ENDPOINTS.userProfile.replace('{userId}', userId);
+        fetch(`${API_BASE_URL}${userEndpoint}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch user data');
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('User data fetched for profile:', data);
+            updateProfileFromData(data);
+            
+            // Cache the data if the cache exists
+            if (window.userDataCache) {
+                window.userDataCache.set(userId, data);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching user header data:', error);
+            // If there's an error, we'll keep showing the cached score
+        });
+    }
+}
+
+function updateProfileFromData(data) {
+    // Update the score display with the latest from the database
+    if (data.score !== undefined && !isNaN(data.score)) {
+        const dbScore = parseInt(data.score);
+        currentUserScore.textContent = formatNumber(dbScore);
+    }
+    
+    // Use the proper display name or username from the API
+    if (data.displayName || data.username) {
+        const properUsername = data.displayName || data.username;
+        console.log('Using proper username from API:', properUsername);
+        currentUsername.textContent = properUsername;
+        
+        // Update localStorage and sessionStorage with the proper username
+        localStorage.setItem('username', properUsername);
+        sessionStorage.setItem('username', properUsername);
     }
 }
 

@@ -29,6 +29,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const REGISTER_URL = `${API_BASE_URL}/api/auth/register`;
     const LOGIN_URL = `${API_BASE_URL}/api/auth/login`;
 
+    // Cache for user data with 5-minute expiration
+    const userDataCache = {
+        data: {},
+        timestamps: {},
+        expirationTime: 5 * 60 * 1000, // 5 minutes in milliseconds
+
+        get(userId) {
+            const timestamp = this.timestamps[userId];
+            if (timestamp && Date.now() - timestamp < this.expirationTime) {
+                return this.data[userId];
+            }
+            return null;
+        },
+
+        set(userId, data) {
+            this.data[userId] = data;
+            this.timestamps[userId] = Date.now();
+        },
+
+        clear(userId) {
+            delete this.data[userId];
+            delete this.timestamps[userId];
+        }
+    };
+
     // Tab switching functionality
     loginTab.addEventListener('click', () => {
         loginTab.classList.add('active');
@@ -550,6 +575,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Function to fetch user data from the database
     async function fetchUserDataFromDB(userId) {
+        // Check cache first
+        const cachedData = userDataCache.get(userId);
+        if (cachedData) {
+            console.log('Using cached user data');
+            return cachedData;
+        }
+
         try {
             const response = await fetch(`${API_BASE_URL}/api/user/${userId}`, {
                 method: 'GET',
@@ -565,6 +597,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const userData = await response.json();
             
+            // Cache the data
+            userDataCache.set(userId, userData);
+            
             // Update the username in storage with the one from the database
             const username = userData.username || userData.displayName;
             if (username) {
@@ -575,8 +610,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 console.log('Username fetched from database:', username);
             }
+
+            return userData;
         } catch (error) {
             console.error('Error fetching user data:', error);
+            return null;
         }
     }
 
