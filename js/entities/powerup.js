@@ -436,6 +436,23 @@ class PowerUpManager {
                 // Player collected the power-up
                 const duration = powerUp.collect();
                 
+                // Play power-up sound effect
+                try {
+                    if (window.game && window.game.sounds && window.game.sounds.powerUp) {
+                        window.game.sounds.powerUp.currentTime = 0; // Reset sound position
+                        const playPromise = window.game.sounds.powerUp.play();
+                        
+                        // Handle the promise properly to avoid uncaught exceptions
+                        if (playPromise !== undefined) {
+                            playPromise.catch(error => {
+                                console.warn('[DEBUG] Could not play power-up sound', error);
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[DEBUG] Power-up sound error:', e);
+                }
+                
                 // Check if player exists and has the activatePowerUp method
                 if (player && typeof player.activatePowerUp === 'function') {
                     // Safely activate the power-up on the player

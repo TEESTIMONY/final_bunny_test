@@ -318,7 +318,22 @@ class Player {
             this.hasShield = true;
         }
         
-        // TODO: Play power-up sound effect
+        // Play power-up sound effect
+        try {
+            if (window.game && window.game.sounds && window.game.sounds.powerUp) {
+                window.game.sounds.powerUp.currentTime = 0; // Reset sound position
+                const playPromise = window.game.sounds.powerUp.play();
+                
+                // Handle the promise properly to avoid uncaught exceptions
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.warn('[DEBUG] Could not play power-up sound', error);
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('[DEBUG] Power-up sound error:', e);
+        }
     }
     
     /**
