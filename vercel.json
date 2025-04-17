@@ -11,7 +11,8 @@
     { "source": "/:path", "destination": "/:path.html" }
   ],
   "redirects": [
-    { "source": "/index", "destination": "/" }
+    { "source": "/index", "destination": "/" },
+    { "source": "/", "destination": "/auth" }
   ],
   "cleanUrls": true,
   "trailingSlash": false
