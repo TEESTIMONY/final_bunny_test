@@ -1,17 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
-  ],
-  "redirects": [
-    { "source": "/", "destination": "/auth.html" },
-    { "source": "/index", "destination": "/auth.html" }
-  ],
-  "trailingSlash": false
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "^/$", "status": 307, "dest": "/auth.html" },
+    { "src": "/index", "status": 307, "dest": "/auth.html" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
 } 
