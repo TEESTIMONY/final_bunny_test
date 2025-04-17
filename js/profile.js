@@ -3,16 +3,18 @@
  * Handles loading and displaying user profile data
  */
 
-// API Configuration
-const API_BASE_URL = 'https://final-again-backend.vercel.app/api';
-const API_ENDPOINTS = {
-    users: '/users',
-    userProfile: '/user/{userId}',
-    userGameHistory: '/users/{userId}/games',
-    userAchievements: '/users/{userId}/achievements',
-    referral: '/referral',
-    referralStats: '/referral/stats/{userId}'
-};
+// Import Appwrite configuration
+import config from './config/appwrite.js';
+
+// Initialize Appwrite client
+const client = new Appwrite.Client()
+    .setEndpoint(config.endpoint)
+    .setProject(config.projectId);
+
+// Initialize Appwrite services
+const databases = new Appwrite.Databases(client);
+const account = new Appwrite.Account(client);
+const Query = Appwrite.Query; // Import Query from Appwrite
 
 // DOM Elements
 const loadingState = document.getElementById('loadingState');
@@ -58,95 +60,290 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function initProfile() {
     console.log('Initializing profile page');
     
-    // ADDITIONAL FIX: Clear any potentially incorrect rank data
-    localStorage.removeItem('rank');
-    sessionStorage.removeItem('rank');
-    
-    // Load current user info from local storage
-    loadUserInfo();
-    
-    // Get the current logged-in user's ID from localStorage or sessionStorage
+    // Force refresh user data to clear cache first
     const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
-    
-    // Check if we need to force a fresh API fetch (after login with referral)
-    const forceRefresh = sessionStorage.getItem('forceProfileRefresh') === 'true';
-    if (forceRefresh) {
-        console.log('Force refresh flag detected - fetching fresh data from API');
-        sessionStorage.removeItem('forceProfileRefresh'); // Clear the flag
-    }
-    
-    if (userId) {
-        try {
-            // ADDITIONAL FIX: First fetch leaderboard data to get accurate rank
-            await fetchLeaderboardDataForRank(userId);
-            // Then load profile data for the current user
-            await loadProfileData(userId, forceRefresh);
-        } catch (error) {
-            console.error('Error fetching leaderboard data:', error);
-            // Continue with profile data loading even if leaderboard fetch fails
-            await loadProfileData(userId, forceRefresh);
+    if (userId && window.userDataCache) {
+        console.log('Clearing user data cache for profile page');
+        window.userDataCache.clear(userId);
+        
+        // If refreshUserScore is available, use it to get fresh data
+        if (window.refreshUserScore) {
+            try {
+                await window.refreshUserScore();
+                console.log('User score refreshed on profile page load');
+            } catch (error) {
+                console.error('Error refreshing user score on profile load:', error);
+            }
         }
-    } else {
-        // If no user is logged in, show a guest profile or error
-        showError('Please log in to view your profile');
+        
+        // Fetch the referral count directly from the database
+        try {
+            console.log('Fetching referral count from database');
+            const userDoc = await databases.getDocument(
+                config.databaseId,
+                config.usersCollectionId,
+                userId
+            );
+            
+            // Update localStorage with the latest referral count
+            if (userDoc && userDoc.referralCount !== undefined) {
+                const referralCount = parseInt(userDoc.referralCount || 0);
+                console.log('Referral count from database:', referralCount);
+                localStorage.setItem('referralCount', referralCount.toString());
+                sessionStorage.setItem('referralCount', referralCount.toString());
+            }
+        } catch (error) {
+            console.error('Error fetching referral count:', error);
+        }
     }
+    
+    // Remove any existing game history section
+    removeGameHistory();
+    
+    // Apply enhanced styles
+    enhanceButtonStyles();
+    addReferralStyles();
+    
+    // Load user info from Appwrite
+    await loadUserInfo();
+    
+    // Set up event listeners for profile tabs
+    setupProfileTabs();
+    
+    // Initialize profile data
+    loadProfileData();
+    
+    // Set up referral system
+    setupReferralSystem();
+    
+    // Add event listeners for buttons
+    document.addEventListener('click', function(event) {
+        // Copy referral link button
+        if (event.target.closest('#copyReferralButton')) {
+            copyReferralLink();
+        }
+        
+        // Share referral link button
+        if (event.target.closest('#shareReferralButton')) {
+            shareReferralLink();
+        }
+    });
+}
+
+/**
+ * Remove game history section if it exists
+ */
+function removeGameHistory() {
+    const gameHistorySection = document.querySelector('.game-history');
+    if (gameHistorySection) {
+        console.log('Removing game history section');
+        gameHistorySection.remove();
+    }
+}
+
+/**
+ * Set up the referral system with Appwrite integration
+ */
+function setupReferralSystem() {
+    // Get the referral link input element
+    const referralLinkInput = document.getElementById('referralLinkInput');
+    if (!referralLinkInput) {
+        console.log('Referral link input not found, might not be created yet');
+        return;
+    }
+    
+    // Update user info in the header
+    updateUserInfoFromAppwrite();
+    
+    // Get the current user ID from Appwrite
+    account.get()
+        .then(user => {
+            // Generate the referral link with the user's ID using our function
+            const referralLink = generateReferralLink(user.$id, user.name || user.email);
+            
+            // Set the referral link input value
+            referralLinkInput.value = referralLink;
+            
+            // Log the link for debugging
+            console.log('Generated referral link:', referralLink);
+            
+            // Load referral stats
+            loadReferralStats(user.$id);
+        })
+        .catch(error => {
+            console.error('Error getting user data:', error);
+            // Set a placeholder for the referral link
+            referralLinkInput.value = 'Please log in to get your referral link';
+            referralLinkInput.disabled = true;
+        });
+}
+
+/**
+ * Update user info in the header from Appwrite
+ */
+function updateUserInfoFromAppwrite() {
+    console.log('Updating user info from Appwrite');
+    
+    // Get DOM elements for user info
+    const userNameElement = document.getElementById('currentUsername');
+    const userScoreElement = document.getElementById('currentUserScore');
+    
+    if (!userNameElement || !userScoreElement) {
+        console.error('User info elements not found in the DOM');
+        return;
+    }
+    
+    // First try to use the refreshUserScore global function if available
+    if (window.refreshUserScore) {
+        console.log('Using refreshUserScore to get latest user data');
+        window.refreshUserScore()
+            .then(userData => {
+                if (userData) {
+                    console.log('User data refreshed successfully:', userData);
+                    // The refreshUserScore function should already update the score display
+                    return;
+                } else {
+                    // If no data was returned, fall back to the original method
+                    console.log('No data from refreshUserScore, falling back to standard method');
+                    fetchUserDataWithAppwrite();
+                }
+            })
+            .catch(error => {
+                console.error('Error with refreshUserScore:', error);
+                // Fall back to the original method
+                fetchUserDataWithAppwrite();
+            });
+    } else {
+        // Fall back to the original method if refreshUserScore is not available
+        fetchUserDataWithAppwrite();
+    }
+    
+    // Helper function to fetch user data with Appwrite
+    function fetchUserDataWithAppwrite() {
+    // Try to get current user from Appwrite
+    account.get()
+        .then(user => {
+            console.log('User data fetched from Appwrite:', user);
+            
+            // Update username in the header
+            if (user.name) {
+                userNameElement.textContent = user.name;
+                // Also update in storage for other pages
+                localStorage.setItem('username', user.name);
+                sessionStorage.setItem('username', user.name);
+            }
+            
+                // Fetch the user document to get the score - with no-cache headers
+                console.log('Fetching fresh user document from Appwrite');
+                
+                // First clear any cached data
+                if (window.userDataCache) {
+                    window.userDataCache.clear(user.$id);
+                }
+                
+                // Then fetch the document
+            return databases.getDocument(
+                config.databaseId,
+                config.usersCollectionId,
+                user.$id
+            );
+        })
+        .then(userDoc => {
+            console.log('User document fetched from Appwrite:', userDoc);
+            
+            // Update score in the header
+            const score = userDoc.score || userDoc.highScore || 0;
+            userScoreElement.textContent = formatNumber(score);
+            
+            // Also update in storage for other pages
+            localStorage.setItem('score', score.toString());
+            sessionStorage.setItem('score', score.toString());
+            
+            // Update highScore if available
+            if (userDoc.highScore) {
+                localStorage.setItem('highScore', userDoc.highScore.toString());
+                sessionStorage.setItem('highScore', userDoc.highScore.toString());
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching user data from Appwrite:', error);
+            
+            // Fall back to localStorage values
+            const storedUsername = localStorage.getItem('username') || sessionStorage.getItem('username');
+            const storedScore = localStorage.getItem('score') || sessionStorage.getItem('score');
+            
+            if (storedUsername) {
+                userNameElement.textContent = storedUsername;
+            }
+            
+            if (storedScore) {
+                userScoreElement.textContent = formatNumber(parseInt(storedScore));
+            }
+        });
+    }
+}
+
+/**
+ * Load referral statistics for the current user
+ * @param {string} userId - The current user's ID
+ */
+function loadReferralStats(userId) {
+    // Get elements to update
+    const referralsCount = document.getElementById('referrals-count');
+    const rewardsCount = document.getElementById('rewards-count');
+    
+    if (!referralsCount || !rewardsCount) return;
+    
+    // Query Appwrite database for referral statistics
+    databases.listDocuments('referrals', [
+        Query.equal('referrerId', userId)
+    ])
+    .then(response => {
+        // Update the referrals count
+        if (referralsCount) {
+            referralsCount.textContent = response.documents.length;
+        }
+        
+        // Calculate rewards (1 carrot per referral)
+        const rewards = response.documents.length;
+        if (rewardsCount) {
+            rewardsCount.textContent = rewards;
+        }
+    })
+    .catch(error => {
+        console.error('Error loading referral stats:', error);
+        // Set default values if there's an error
+        if (referralsCount) referralsCount.textContent = '0';
+        if (rewardsCount) rewardsCount.textContent = '0';
+    });
 }
 
 /**
  * Load and display user information on the top bar
  */
-function loadUserInfo() {
-    // Get user info from localStorage or sessionStorage
-    const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+async function loadUserInfo() {
+    // First try to update from Appwrite directly
+    try {
+        await updateUserInfoFromAppwrite();
+        return;
+    } catch (error) {
+        console.warn('Could not update from Appwrite directly, using fallback:', error);
+    }
+    
+    // Fallback to localStorage/sessionStorage
     const username = localStorage.getItem('username') || sessionStorage.getItem('username');
     const score = localStorage.getItem('score') || sessionStorage.getItem('score');
     
     // Update UI with stored values
-    if (username) {
-        currentUsername.textContent = username;
-    }
-    if (score) {
-        currentUserScore.textContent = formatNumber(parseInt(score));
+    const userNameElement = document.getElementById('currentUsername');
+    const userScoreElement = document.getElementById('currentUserScore');
+    
+    if (username && userNameElement) {
+        userNameElement.textContent = username;
     }
     
-    // If we have a userId, we can try to fetch the latest score and proper username
-    if (userId) {
-        // Check cache first
-        const cachedData = window.userDataCache?.get(userId);
-        if (cachedData) {
-            console.log('Using cached user data for profile');
-            updateProfileFromData(cachedData);
-            return;
-        }
-
-        // Fetch the latest score from the API
-        const userEndpoint = API_ENDPOINTS.userProfile.replace('{userId}', userId);
-        fetch(`${API_BASE_URL}${userEndpoint}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to fetch user data');
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('User data fetched for profile:', data);
-            updateProfileFromData(data);
-            
-            // Cache the data if the cache exists
-            if (window.userDataCache) {
-                window.userDataCache.set(userId, data);
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching user header data:', error);
-            // If there's an error, we'll keep showing the cached score
-        });
+    if (score && userScoreElement) {
+        userScoreElement.textContent = formatNumber(parseInt(score));
     }
 }
 
@@ -155,12 +352,15 @@ function updateProfileFromData(data) {
     if (data.score !== undefined && !isNaN(data.score)) {
         const dbScore = parseInt(data.score);
         currentUserScore.textContent = formatNumber(dbScore);
+    } else if (data.highScore !== undefined && !isNaN(data.highScore)) {
+        const dbScore = parseInt(data.highScore);
+        currentUserScore.textContent = formatNumber(dbScore);
     }
     
     // Use the proper display name or username from the API
     if (data.displayName || data.username) {
         const properUsername = data.displayName || data.username;
-        console.log('Using proper username from API:', properUsername);
+        console.log('Using proper username:', properUsername);
         currentUsername.textContent = properUsername;
         
         // Update localStorage and sessionStorage with the proper username
@@ -172,71 +372,94 @@ function updateProfileFromData(data) {
 /**
  * Load profile data for a specific user
  */
-async function loadProfileData(userId, forceRefresh) {
+async function loadProfileData(userId) {
     try {
+        // If userId is not provided, try to get it from localStorage
+        if (!userId) {
+            userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+            console.log('Using userId from localStorage:', userId);
+            
+            if (!userId) {
+                console.error('No user ID found');
+                showError('Please log in to view your profile');
+                return;
+            }
+        }
+        
         // Show loading state
         loadingState.style.display = 'flex';
         errorState.style.display = 'none';
         profileData.style.display = 'none';
         
-        // Try to fetch user data from the API
-        const userEndpoint = API_ENDPOINTS.userProfile.replace('{userId}', userId);
-        fetch(`${API_BASE_URL}${userEndpoint}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            // Add cache busting parameter when forcing refresh
-            ...(forceRefresh ? {cache: 'no-cache'} : {})
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to fetch user data');
-            }
-            return response.json();
-        })
-        .then(async data => {
-            console.log('User profile data fetched from API:', data);
-            
-            // Log specific data points for debugging
-            console.log('API data - games played:', data.gamesPlayed);
-            console.log('API data - highScore:', data.highScore);
-            console.log('API data - rank:', data.rank);
-            console.log('API data - createdAt:', data.createdAt);
-            console.log('API data - referralCount:', data.referralCount);
-            
-            // Update localStorage with fresh data for future use
-            if (data.referralCount !== undefined) {
-                console.log('Updating localStorage with referral count from API:', data.referralCount);
-                localStorage.setItem('referralCount', data.referralCount.toString());
-                sessionStorage.setItem('referralCount', data.referralCount.toString());
-            }
-            
-            // Process API data to match our expected format
-            const userData = processApiUserData(data, userId);
-            
-            // Display the profile with data from the API
-            await displayProfileData(userData);
-        })
-        .catch(async error => {
-            console.error('Error fetching profile data from API:', error);
-            console.log('Falling back to localStorage data');
-            
-            // Fallback to localStorage data if the API call fails
-            const userData = getCurrentUserData();
-            await displayProfileData(userData);
-        });
+        // Force clear any cached data for this user
+        if (window.userDataCache) {
+            window.userDataCache.clear(userId);
+            console.log('Cache cleared for user ID:', userId);
+        }
         
+        // Try to fetch user data from Appwrite
+        try {
+            console.log('Fetching user data from Appwrite...');
+            const userData = await databases.getDocument(
+                config.databaseId, 
+                config.usersCollectionId, 
+                userId
+            );
+            
+            console.log('User data fetched directly from Appwrite:', userData);
+            await displayProfileData(userData);
+            return userData;
+        } catch (error) {
+            console.error('Error fetching user data from Appwrite:', error);
+            
+            // Try using the API endpoint as fallback
+            try {
+                console.log('Falling back to API endpoint...');
+                const response = await fetch(`${config.apiEndpoint}/user/${userId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch user data from API');
+                }
+                
+                const apiData = await response.json();
+                console.log('User data fetched from API:', apiData);
+                
+                // Convert API data to the format expected by the UI
+                const processedData = processApiUserData(apiData, userId);
+                await displayProfileData(processedData);
+                return processedData;
+            } catch (apiError) {
+                console.error('Error fetching user data from API:', apiError);
+                
+                // Show error state
+                loadingState.style.display = 'none';
+                errorState.style.display = 'flex';
+                profileData.style.display = 'none';
+                
+                // Log details
+                console.error('All fetch attempts failed:', apiError);
+                
+                // Return null to indicate failure
+                return null;
+            }
+        }
     } catch (error) {
         console.error('Error in loadProfileData:', error);
-        // Still try to show some data even if there's an error
-        try {
-            const userData = getCurrentUserData();
-            await displayProfileData(userData);
-        } catch (innerError) {
-            console.error('Failed to display profile:', innerError);
-            showError('Could not load profile data');
-        }
+        
+        // Show error state
+        loadingState.style.display = 'none';
+        errorState.style.display = 'flex';
+        profileData.style.display = 'none';
+        
+        return null;
     }
 }
 
@@ -247,237 +470,127 @@ function processApiUserData(apiData, userId) {
     console.log('Processing API data:', apiData);
     
     // Get username with fallback
-    const username = apiData.username || localStorage.getItem('username') || sessionStorage.getItem('username') || 'Guest Player';
+    const username = apiData.displayName || apiData.username || 
+                    localStorage.getItem('username') || sessionStorage.getItem('username') || 
+                    'Guest Player';
     
     // Get high score from API data
-    let highScore = 0;
-    if (apiData.score !== undefined && !isNaN(apiData.score)) {
-        highScore = parseInt(apiData.score);
-        
-        // Update localStorage for consistency
-        localStorage.setItem('highScore', highScore);
+    const userScore = parseInt(apiData.score || apiData.highScore || 0);
+    
+    // Get games played from API data
+    const gamesPlayed = parseInt(apiData.gamesPlayed || 0);
+    
+    // Get rank from API data or localStorage
+    let rank = apiData.rank || 
+              parseInt(localStorage.getItem('rank') || sessionStorage.getItem('rank') || 0);
+    
+    // If rank is 0 or undefined, set to a placeholder
+    if (!rank || rank === 0 || rank === 999) {
+        rank = '---';
+    }
+    
+    // Determine if this user is a top player (top 10)
+    const isTopPlayer = typeof rank === 'number' && rank <= 10;
+    
+    // Extract referral count if available
+    const referralCount = apiData.referralCount || 
+                        parseInt(localStorage.getItem('referralCount') || 
+                                sessionStorage.getItem('referralCount') || 0);
+    
+    // Determine when the user joined
+    let joined;
+    if (apiData.$createdAt) {
+        joined = new Date(apiData.$createdAt);
+    } else if (apiData.createdAt) {
+        joined = new Date(apiData.createdAt);
     } else {
-        // Fallback to localStorage
-        const localScore = localStorage.getItem('highScore') || sessionStorage.getItem('highScore');
-        highScore = parseInt(localScore || '0');
+        // Fallback to a default date if not available
+        joined = new Date();
     }
     
-    // Get rank from API data - IMPORTANT: don't default to rank 1
-    let rank = apiData.rank;
-    if (rank === undefined || rank === null) {
-        try {
-            // First try to get the rank from localStorage (which should be updated from leaderboard)
-            const storedRank = localStorage.getItem('rank') || sessionStorage.getItem('rank');
-            rank = storedRank ? parseInt(storedRank) : 999; // Use high number as default (not 1)
-            console.log('Using stored rank from localStorage:', rank);
-    } catch (e) {
-        console.error('Error parsing rank:', e);
-            rank = 999; // Default to a high rank if no data available
-        }
-    } else {
-        // We have a rank from the API - log it for debugging
-        console.log('Using rank directly from API:', rank);
-        
-        // Store the correct rank from API
-        localStorage.setItem('rank', rank.toString());
-        console.log('Updated localStorage with API rank:', rank);
-    }
-    
-    // Override with rank from leaderboard if significantly different
-    const leaderboardRank = localStorage.getItem('leaderboardRank');
-    if (leaderboardRank && Math.abs(parseInt(leaderboardRank) - rank) > 1) {
-        console.log(`API rank (${rank}) differs from leaderboard rank (${leaderboardRank}). Using leaderboard rank.`);
-        rank = parseInt(leaderboardRank);
-    }
-    
-    // Get join date from API or use stored value
-    let joinDate;
-    if (apiData.createdAt) {
-        console.log('Using createdAt date from API:', apiData.createdAt);
-        
-        // If it's already in the format "April 11, 2025 at 10:49 AM"
-        if (typeof apiData.createdAt === 'string' && apiData.createdAt.includes(' at ')) {
-            // Just extract the date part, removing the time
-            joinDate = apiData.createdAt.split(' at ')[0];
-            console.log('Extracted date part from createdAt:', joinDate);
-        } else {
-            joinDate = formatDate(new Date(apiData.createdAt));
-        }
-        
-        localStorage.setItem('joinDate', joinDate);
-    } else if (apiData.joinDate) {
-        console.log('Using joinDate from API:', apiData.joinDate);
-        joinDate = formatDate(new Date(apiData.joinDate));
-        localStorage.setItem('joinDate', joinDate);
-    } else {
-        const storedJoinDate = localStorage.getItem('joinDate') || sessionStorage.getItem('joinDate');
-        if (storedJoinDate) {
-            console.log('Using stored join date:', storedJoinDate);
-            joinDate = storedJoinDate;
-        } else {
-            console.log('No join date available, using current date');
-            joinDate = formatDate(new Date());
-        }
-    }
-    
-    // Get games played from API or estimate
-    let gamesPlayed = apiData.gamesPlayed;
-    if (gamesPlayed === undefined || gamesPlayed === null) {
-        try {
-            console.log('Games played not found in API data, checking localStorage');
-            const storedGames = localStorage.getItem('gamesPlayed') || sessionStorage.getItem('gamesPlayed');
-            if (storedGames) {
-                gamesPlayed = parseInt(storedGames);
-                console.log('Using stored games played:', gamesPlayed);
-            } else {
-                gamesPlayed = Math.max(1, Math.floor(highScore / 500));
-                console.log('Estimated games played based on score:', gamesPlayed);
-            }
-        } catch (e) {
-            console.error('Error parsing games played:', e);
-            gamesPlayed = 1;
-        }
-    } else {
-        // Store the valid games played count from API
-        console.log('Using games played directly from API:', gamesPlayed);
-        localStorage.setItem('gamesPlayed', gamesPlayed.toString());
-    }
-    
-    // Get referral data with fallback
-    let referralCount = apiData.referralCount || 0;
-    let referralBonus = apiData.referralBonus || 0;
-    
-    if (apiData.referralCount === undefined) {
-        try {
-            referralCount = parseInt(localStorage.getItem('referralCount') || sessionStorage.getItem('referralCount') || '0');
-        } catch (e) {
-            console.error('Error parsing referral count:', e);
-        }
-    }
-    
-    if (apiData.referralBonus === undefined) {
-        try {
-            referralBonus = parseInt(localStorage.getItem('referralBonus') || sessionStorage.getItem('referralBonus') || '0');
-        } catch (e) {
-            console.error('Error parsing referral bonus:', e);
-        }
-    }
-    
-    // Create achievements based on the user's score and rank
+    // Build achievements array (for now just generate dummy achievements)
     const achievements = [];
     
-    // Basic achievement for all users
-    achievements.push({
-        icon: 'fas fa-play-circle',
-        name: 'Hop Bunny Player',
-        description: 'Joined the hopping adventure'
-    });
-    
-    // Achievement based on rank - only add if we have a valid rank (not our default 999)
-    if (rank < 999) {
-    if (rank === 1) {
+    // If score is above certain thresholds, add corresponding achievements
+    if (userScore >= 1000) {
         achievements.push({
-            icon: 'fas fa-crown',
-            name: 'Top Hopper',
-            description: 'Reached #1 on the leaderboard'
+            icon: 'fas fa-trophy',
+            name: 'High Jumper',
+            description: 'Reached a score of 1000 or more'
         });
-    } else if (rank <= 3) {
+    }
+    
+    if (userScore >= 5000) {
         achievements.push({
             icon: 'fas fa-medal',
-            name: 'Leaderboard Elite',
-            description: `Reached #${rank} on the leaderboard`
-        });
-    } else if (rank <= 10) {
-        achievements.push({
-            icon: 'fas fa-award',
-            name: 'Top 10',
-            description: `Ranked #${rank} on the leaderboard`
-        });
-        } else if (rank <= 50) {
-            achievements.push({
-                icon: 'fas fa-star',
-                name: 'Rising Star',
-                description: `In the top 50 on the leaderboard`
-            });
-        }
-    }
-    
-    // Achievements based on score
-    if (highScore >= 5000) {
-        achievements.push({
-            icon: 'fas fa-fire',
-            name: '5K Master',
-            description: 'Scored over 5,000 points'
-        });
-    } else if (highScore >= 1000) {
-        achievements.push({
-            icon: 'fas fa-star',
-            name: '1K Club',
-            description: 'Scored over 1,000 points'
+            name: 'Pro Hopper',
+            description: 'Reached a score of 5000 or more'
         });
     }
     
-    // Achievements based on referrals
-    if (referralCount >= 10) {
+    if (gamesPlayed >= 10) {
         achievements.push({
-            icon: 'fas fa-user-friends',
-            name: 'Community Builder',
-            description: 'Referred 10+ players to Hop Bunny'
+            icon: 'fas fa-gamepad',
+            name: 'Dedicated Player',
+            description: 'Played 10 or more games'
         });
-    } else if (referralCount >= 5) {
+    }
+    
+    if (referralCount >= 1) {
         achievements.push({
             icon: 'fas fa-user-plus',
-            name: 'Friend Bringer',
-            description: 'Referred 5+ players to Hop Bunny'
-        });
-    } else if (referralCount >= 1) {
-        achievements.push({
-            icon: 'fas fa-share-alt',
-            name: 'Word Spreader',
-            description: 'Referred their first player to Hop Bunny'
+            name: 'Influencer',
+            description: 'Referred at least one friend'
         });
     }
     
-    // Get game history from API or generate it
-    let gameHistory = apiData.gameHistory || [];
-    
-    // If no game history from API, generate some
-    if (!gameHistory.length) {
-        const today = new Date();
-        
-        // Add the best score game
-        gameHistory.push({
-            date: formatDate(today),
-            score: highScore,
-            isHighScore: true
+    if (isTopPlayer) {
+        achievements.push({
+            icon: 'fas fa-crown',
+            name: 'Leaderboard Champion',
+            description: 'Reached the top 10 on the leaderboard'
         });
+    }
+    
+    // Generate game history
+    const gameHistoryCount = Math.min(5, gamesPlayed);
+    const gameHistory = [];
+    
+    // If we have played games, generate some mock history
+    if (gameHistoryCount > 0) {
+        const now = new Date();
         
-        // Add some additional game entries
-        for (let i = 1; i <= 3; i++) {
-            const pastDate = new Date(today);
-            pastDate.setDate(pastDate.getDate() - i);
+        for (let i = 0; i < gameHistoryCount; i++) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            
+            // Generate a score that's a percentage of the high score
+            const historyScore = Math.floor(userScore * (0.5 + (Math.random() * 0.5)));
+            const isHighScore = i === 0; // First one is the high score
             
             gameHistory.push({
-                date: formatDate(pastDate),
-                score: Math.floor(highScore * 0.8), // 80% of high score
-                isHighScore: false
+                date: date,
+                score: historyScore,
+                isHighScore: isHighScore
             });
         }
+        
+        // Sort by date, newest first
+        gameHistory.sort((a, b) => b.date - a.date);
     }
     
-    console.log('Profile data prepared from API');
-    
     return {
-        userId: userId,
-        username: username,
-        joinDate: joinDate,
-        highScore: highScore,
-        rank: rank,
-        referralCount: referralCount,
-        referralBonus: referralBonus,
-        achievements: achievements,
-        gameHistory: gameHistory,
-        referralLink: generateReferralLink(userId || 'guest', username)
+        userId,
+        username,
+        score: userScore,
+        highScore: userScore,
+        rank,
+        isTopPlayer,
+        joined,
+        gamesPlayed,
+        referralCount,
+        achievements,
+        gameHistory
     };
 }
 
@@ -720,82 +833,256 @@ function getCurrentUserData() {
 }
 
 /**
- * Display the user's profile data
+ * Fetch and display user's rank
+ */
+async function fetchAndDisplayRank(userData) {
+    try {
+        // Always fetch fresh rank from leaderboard for consistency
+        console.log('Fetching fresh rank from leaderboard for profile display');
+        const userId = userData.$id || userData.userId;
+        
+        if (!userId) {
+            console.error('No user ID available for rank fetching');
+            if (playerRank) playerRank.textContent = `--`;
+            return;
+        }
+        
+        // Get the rank from leaderboard data
+        const rank = await fetchLeaderboardDataForRank(userId);
+        console.log('Fresh rank fetched for profile:', rank);
+        
+        // Display the rank
+        if (rank !== undefined && rank !== null) {
+            if (playerRank) playerRank.textContent = `#${rank}`;
+            
+            // Store the rank in localStorage for use elsewhere
+            localStorage.setItem('rank', rank.toString());
+            sessionStorage.setItem('rank', rank.toString());
+            
+            // Apply appropriate styling
+            addTopPlayerStyles(rank);
+        } else {
+            // Fallback if rank can't be determined
+            if (playerRank) playerRank.textContent = `--`;
+        }
+    } catch (error) {
+        console.error('Error fetching rank:', error);
+        if (playerRank) playerRank.textContent = `--`;
+    }
+}
+
+/**
+ * Display profile data in the UI
  */
 async function displayProfileData(userData) {
     try {
+        // Hide loading state
+        if (loadingState) loadingState.style.display = 'none';
+        
         console.log('Displaying profile data:', userData);
         
-        // Clear loading state
-    loadingState.style.display = 'none';
-    errorState.style.display = 'none';
-    profileData.style.display = 'block';
-    
-        // Set username and join date
-    profileUsername.textContent = userData.username;
-    joinDate.textContent = userData.joinDate;
-        
-        // Set high score with animation
-    highScore.textContent = formatNumber(userData.highScore);
-    
-    // Format rank display with special icons for top 3
-    const rankElement = document.getElementById('playerRank');
-    const rank = userData.rank;
-    let rankDisplay = '';
-        
-        console.log('Displaying profile with rank:', rank);
-        
-        // Remove any existing rank classes from the card
-        const rankCard = document.querySelector('.rank-card');
-        if (rankCard) {
-            rankCard.classList.remove('gold-rank', 'silver-rank', 'bronze-rank');
+        // Check if userData is null or undefined
+        if (!userData) {
+            console.error('userData is null or undefined');
+            showError('No profile data available');
+            return;
         }
-    
-    if (rank === 1) {
-        rankDisplay = `<i class="fas fa-crown" style="color: gold;"></i> ${rank}`;
-            if (rankCard) rankCard.classList.add('gold-rank');
-    } else if (rank === 2) {
-        rankDisplay = `<i class="fas fa-medal" style="color: silver;"></i> ${rank}`;
-            if (rankCard) rankCard.classList.add('silver-rank');
-    } else if (rank === 3) {
-        rankDisplay = `<i class="fas fa-award" style="color: #cd7f32;"></i> ${rank}`;
-            if (rankCard) rankCard.classList.add('bronze-rank');
-        } else if (rank === 999 || rank === undefined) {
-            // For users with no rank yet
-            rankDisplay = `<i class="fas fa-question"></i> --`;
-    } else {
-        rankDisplay = `<i class="fas fa-hashtag"></i> ${rank}`;
-    }
-    
-    rankElement.innerHTML = rankDisplay;
-    
-    // Add top player class to profile header if in top 3
-        const profileHeader = document.querySelector('.profile-header');
-        // Remove any existing rank classes first
-        if (profileHeader) {
-            profileHeader.classList.remove('top-1-player', 'top-2-player', 'top-3-player');
+        
+        // Extract data from user object
+        const username = userData.displayName || userData.username || 'Anonymous';
+        const createdAt = userData.$createdAt || userData.createdAt || new Date().toISOString();
+        const score = parseInt(userData.score || userData.highScore || 0);
+        const gamesPlayed = parseInt(userData.gamesPlayed || 0);
+        
+        // Save referral count to localStorage if it exists in the data
+        if (userData.referralCount !== undefined) {
+            const referralCount = parseInt(userData.referralCount || 0);
+            console.log('Saving referral count to storage:', referralCount);
+            localStorage.setItem('referralCount', referralCount.toString());
+            sessionStorage.setItem('referralCount', referralCount.toString());
+        }
+        
+        // Format join date
+        const joinDateFormatted = formatDate(createdAt);
+        
+        // Generate the referral link if not present
+        if (!userData.referralLink && (userData.$id || userData.userId)) {
+            userData.referralLink = generateReferralLink(userData.$id || userData.userId, username);
+        }
+        
+        // Update the UI elements
+        if (profileUsername) profileUsername.textContent = username;
+        if (joinDate) joinDate.textContent = joinDateFormatted;
+        if (highScore) highScore.textContent = formatNumber(score);
+        
+        // Also update the score in the header for consistency
+        const currentUserScoreElement = document.getElementById('currentUserScore');
+        if (currentUserScoreElement) {
+            currentUserScoreElement.textContent = formatNumber(score);
             
-            // Only add class if in top 3
-            if (rank <= 3 && rank !== 999 && rank !== undefined) {
-            profileHeader.classList.add(`top-${rank}-player`);
+            // Update localStorage with the latest score
+            localStorage.setItem('score', score.toString());
+            localStorage.setItem('highScore', score.toString());
+            sessionStorage.setItem('score', score.toString());
+            sessionStorage.setItem('highScore', score.toString());
         }
-    }
-    
-    // Display achievements
-    displayAchievements(userData.achievements);
-    
-        // Create and display referral section - now async
-        await displayReferralSection(userData);
-    
-    // Add styles for top players
-    addTopPlayerStyles(rank);
-    
-    // Animate in the content
-    animateProfileContent();
+        
+        // Fetch and display user's rank using our new function
+        await fetchAndDisplayRank(userData);
+        
+        // Show profile data
+        if (profileData) profileData.style.display = 'block';
+        
+        // Hide error state if visible
+        if (errorState) errorState.style.display = 'none';
+        
+        // Display achievements
+        if (userData.achievements) {
+            displayAchievements(userData.achievements);
+        } else {
+            // Generate default achievements based on score and games played
+            const generatedAchievements = generateAchievementsFromStats(score, gamesPlayed);
+            displayAchievements(generatedAchievements);
+        }
+        
+        // Show referral section if userID is available
+        if (userData.$id || userData.userId) {
+            await displayReferralSection(userData);
+        }
+        
+        // Animate in the content
+        animateProfileContent();
+        
+        return userData;
     } catch (error) {
         console.error('Error displaying profile data:', error);
-        showError('An error occurred while displaying your profile.');
+        showError('Failed to display profile data');
+        return null;
     }
+}
+
+/**
+ * Generate achievements based on user stats when none are provided from server
+ * @param {number} score - User's score
+ * @param {number} gamesPlayed - Number of games played
+ * @returns {Array} Array of achievement objects
+ */
+function generateAchievementsFromStats(score, gamesPlayed) {
+    const achievements = [];
+    
+    // Get referral count from storage if available
+    let referralCount = 0;
+    try {
+        referralCount = parseInt(localStorage.getItem('referralCount') || sessionStorage.getItem('referralCount') || '0');
+        console.log('Referral count for achievements:', referralCount);
+    } catch (e) {
+        console.error('Error parsing referral count:', e);
+    }
+    
+    // Score-based achievements
+    if (score >= 100) {
+        achievements.push({
+            id: 'score_100',
+            title: 'Century Hopper',
+            description: 'Reach 100 points',
+            icon: 'fa-star',
+            unlocked: true
+        });
+    }
+    
+    if (score >= 500) {
+        achievements.push({
+            id: 'score_500',
+            title: 'High Flyer',
+            description: 'Reach 500 points',
+            icon: 'fa-medal',
+            unlocked: true
+        });
+    }
+    
+    if (score >= 1000) {
+        achievements.push({
+            id: 'score_1000',
+            title: 'Master Jumper',
+            description: 'Reach 1,000 points',
+            icon: 'fa-trophy',
+            unlocked: true
+        });
+    }
+    
+    // Games played achievements
+    if (gamesPlayed >= 5) {
+        achievements.push({
+            id: 'games_5',
+            title: 'Regular Player',
+            description: 'Play 5 games',
+            icon: 'fa-gamepad',
+            unlocked: true
+        });
+    }
+    
+    if (gamesPlayed >= 20) {
+        achievements.push({
+            id: 'games_20',
+            title: 'Dedicated Hopper',
+            description: 'Play 20 games',
+            icon: 'fa-crown',
+            unlocked: true
+        });
+    }
+    
+    // Referral achievements
+    if (referralCount >= 1) {
+        achievements.push({
+            id: 'referral_1',
+            title: 'Community Builder',
+            description: 'Invited first friend to play',
+            icon: 'fa-user-plus',
+            unlocked: true
+        });
+    }
+    
+    if (referralCount >= 3) {
+        achievements.push({
+            id: 'referral_3',
+            title: 'Social Hopper',
+            description: 'Invited 3+ friends to play',
+            icon: 'fa-users',
+            unlocked: true
+        });
+    }
+    
+    if (referralCount >= 10) {
+        achievements.push({
+            id: 'referral_10',
+            title: 'Hop Ambassador',
+            description: 'Invited 10+ friends to play',
+            icon: 'fa-certificate',
+            unlocked: true
+        });
+    }
+    
+    // If user has not unlocked any achievements yet
+    if (achievements.length === 0) {
+        achievements.push({
+            id: 'welcome',
+            title: 'Welcome!',
+            description: 'Create your account and start playing',
+            icon: 'fa-award',
+            unlocked: true
+        });
+    }
+    
+    // Add referral invitation achievement for everyone
+    achievements.push({
+        id: 'referral_invite',
+        title: 'Friend Inviter',
+        description: 'Share your referral code with friends',
+        icon: 'fa-share-alt',
+        unlocked: true
+    });
+    
+    return achievements;
 }
 
 /**
@@ -806,8 +1093,8 @@ async function displayReferralSection(userData) {
     
     let referralCount = userData.referralCount || 0;
     
-    // First fetch the latest referral count from the API
-    if (userData.userId && userData.userId !== 'guest') {
+    // First fetch the latest referral count (if we haven't already)
+    if (userData.userId && userData.userId !== 'guest' && (!userData.referralCount || userData.referralCount === 0)) {
         try {
             console.log('Attempting to fetch fresh referral count for userId:', userData.userId);
             const freshReferralCount = await fetchReferralCount(userData.userId);
@@ -821,11 +1108,16 @@ async function displayReferralSection(userData) {
             console.error('Error fetching fresh referral count, using existing value:', error);
         }
     } else {
-        console.log('Skipping referral count fetch - guest user or missing userId');
+        console.log('Using existing referral count or skipping fetch for guest user');
     }
     
     // Update the userData object with our possibly fresh count
     userData.referralCount = referralCount;
+    
+    // Generate referral link if not present
+    if (!userData.referralLink) {
+        userData.referralLink = generateReferralLink(userData.userId || 'guest', userData.username || 'Guest');
+    }
     
     // Create referral section if it doesn't exist
     let referralSection = document.querySelector('.referral-section');
@@ -855,7 +1147,11 @@ async function displayReferralSection(userData) {
         
         // Insert the referral section before the actions row
         const actionsRow = document.querySelector('.actions-row');
-        profileData.insertBefore(referralSection, actionsRow);
+        if (actionsRow) {
+            profileData.insertBefore(referralSection, actionsRow);
+        } else {
+            profileData.appendChild(referralSection);
+        }
     }
     
     // Populate referral stats
@@ -876,16 +1172,20 @@ async function displayReferralSection(userData) {
         <p class="referral-info">Share your unique link with friends. When they sign up, you'll earn 500 bonus points and they'll get 200!</p>
         <div class="referral-link-group">
             <input type="text" id="referralLinkInput" value="${userData.referralLink}" readonly>
-            <div class="referral-buttons">
-                <button id="copyReferralButton" class="game-button small-button" onclick="copyReferralLink()">
-                    <i class="fas fa-copy"></i> Copy
-                </button>
-                <button id="shareReferralButton" class="game-button small-button primary-button" onclick="shareReferralLink()">
-                    <i class="fas fa-share-alt"></i> Share
-                </button>
-            </div>
+        </div>
+        <div class="referral-buttons">
+            <button id="copyReferralButton" class="game-button small-button">
+                <i class="fas fa-copy"></i> Copy
+            </button>
+            <button id="shareReferralButton" class="game-button small-button primary-button">
+                <i class="fas fa-share-alt"></i> Share
+            </button>
         </div>
     `;
+    
+    // Add click event listeners to the buttons
+    document.getElementById('copyReferralButton').addEventListener('click', copyReferralLink);
+    document.getElementById('shareReferralButton').addEventListener('click', shareReferralLink);
     
     // Add styles if not added already
     if (!document.getElementById('referral-styles')) {
@@ -894,88 +1194,236 @@ async function displayReferralSection(userData) {
 }
 
 /**
- * Add CSS styles for top ranked players
+ * Add special styles for top players
  */
 function addTopPlayerStyles(rank) {
-    // Check if styles have already been added
-    if (document.getElementById('top-player-styles')) {
-        return;
-    }
-    
-    // Don't add special styling for invalid ranks
-    if (rank === 999 || rank === undefined) {
-        return;
-    }
-    
-    // Create style element
-    const style = document.createElement('style');
-    style.id = 'top-player-styles';
-    
-    // Define styles for top players
-    const css = `
+    try {
+        // Get the rank card element
+        const rankCard = document.querySelector('.rank-card');
+        if (!rankCard) return;
+        
+        // First remove any existing rank classes
+        rankCard.classList.remove('gold-rank', 'silver-rank', 'bronze-rank', 'top-ten-rank', 'new-player-rank');
+        
+        // Handle different rank types
+        if (rank === 1) {
+            // Gold style for #1 ranked player
+            rankCard.classList.add('gold-rank');
+            
+            const rankIcon = rankCard.querySelector('.stat-icon i');
+            if (rankIcon) {
+                rankIcon.className = 'fas fa-crown';
+            }
+        } else if (rank === 2) {
+            // Silver style for #2 ranked player
+            rankCard.classList.add('silver-rank');
+            
+            const rankIcon = rankCard.querySelector('.stat-icon i');
+            if (rankIcon) {
+                rankIcon.className = 'fas fa-medal';
+            }
+        } else if (rank === 3) {
+            // Bronze style for #3 ranked player
+            rankCard.classList.add('bronze-rank');
+            
+            const rankIcon = rankCard.querySelector('.stat-icon i');
+            if (rankIcon) {
+                rankIcon.className = 'fas fa-medal';
+            }
+        } else if (rank <= 10) {
+            // Top 10 style
+            rankCard.classList.add('top-ten-rank');
+        }
+        
+        // Add rank styles if they don't exist yet
+        if (!document.getElementById('rank-styles')) {
+            const styleEl = document.createElement('style');
+            styleEl.id = 'rank-styles';
+            styleEl.textContent = `
         .gold-rank {
-            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 215, 0, 0.05)) !important;
-            border: 2px solid rgba(255, 215, 0, 0.3) !important;
+                    background: linear-gradient(135deg, #f1c40f, #f39c12);
+                    animation: pulse-gold 2s infinite;
+                }
+                
+                .silver-rank {
+                    background: linear-gradient(135deg, #bdc3c7, #95a5a6);
+                    animation: pulse-silver 2s infinite;
+                }
+                
+                .bronze-rank {
+                    background: linear-gradient(135deg, #e67e22, #d35400);
+                    animation: pulse-bronze 2s infinite;
+                }
+                
+                .top-ten-rank {
+                    background: linear-gradient(135deg, #3498db, #2980b9);
+                }
+                
+                .gold-rank .stat-icon i {
+                    color: #f1c40f;
+                    text-shadow: 0 0 10px rgba(241, 196, 15, 0.7);
+                }
+                
+                .silver-rank .stat-icon i {
+                    color: #ecf0f1;
+                    text-shadow: 0 0 10px rgba(236, 240, 241, 0.7);
+                }
+                
+                .bronze-rank .stat-icon i {
+                    color: #e67e22;
+                    text-shadow: 0 0 10px rgba(230, 126, 34, 0.7);
+                }
+                
+                @keyframes pulse-gold {
+                    0% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.4); }
+                    70% { box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); }
+                    100% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); }
+                }
+                
+                @keyframes pulse-silver {
+                    0% { box-shadow: 0 0 0 0 rgba(189, 195, 199, 0.4); }
+                    70% { box-shadow: 0 0 0 10px rgba(189, 195, 199, 0); }
+                    100% { box-shadow: 0 0 0 0 rgba(189, 195, 199, 0); }
+                }
+                
+                @keyframes pulse-bronze {
+                    0% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.4); }
+                    70% { box-shadow: 0 0 0 10px rgba(230, 126, 34, 0); }
+                    100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
+                }
+            `;
+            document.head.appendChild(styleEl);
         }
-        
-        .gold-rank .stat-icon {
-            color: gold !important;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.7) !important;
-        }
-        
-        .silver-rank {
-            background: linear-gradient(135deg, rgba(192, 192, 192, 0.2), rgba(192, 192, 192, 0.05)) !important;
-            border: 2px solid rgba(192, 192, 192, 0.3) !important;
-        }
-        
-        .silver-rank .stat-icon {
-            color: silver !important;
-            text-shadow: 0 0 10px rgba(192, 192, 192, 0.7) !important;
-        }
-        
-        .bronze-rank {
-            background: linear-gradient(135deg, rgba(205, 127, 50, 0.2), rgba(205, 127, 50, 0.05)) !important;
-            border: 2px solid rgba(205, 127, 50, 0.3) !important;
-        }
-        
-        .bronze-rank .stat-icon {
-            color: #cd7f32 !important;
-            text-shadow: 0 0 10px rgba(205, 127, 50, 0.7) !important;
-        }
-        
-        .top-1-player {
-            border: 2px solid rgba(255, 215, 0, 0.5) !important;
-            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 215, 0, 0.05)) !important;
-        }
-        
-        .top-2-player {
-            border: 2px solid rgba(192, 192, 192, 0.5) !important;
-            background: linear-gradient(135deg, rgba(192, 192, 192, 0.2), rgba(192, 192, 192, 0.05)) !important;
-        }
-        
-        .top-3-player {
-            border: 2px solid rgba(205, 127, 50, 0.5) !important;
-            background: linear-gradient(135deg, rgba(205, 127, 50, 0.2), rgba(205, 127, 50, 0.05)) !important;
-        }
-        
-        .score-card {
-            ${rank === 1 ? 'background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 215, 0, 0.05)) !important; border: 2px solid rgba(255, 215, 0, 0.3) !important;' : ''}
-            ${rank === 2 ? 'background: linear-gradient(135deg, rgba(192, 192, 192, 0.2), rgba(192, 192, 192, 0.05)) !important; border: 2px solid rgba(192, 192, 192, 0.3) !important;' : ''}
-            ${rank === 3 ? 'background: linear-gradient(135deg, rgba(205, 127, 50, 0.2), rgba(205, 127, 50, 0.05)) !important; border: 2px solid rgba(205, 127, 50, 0.3) !important;' : ''}
-        }
-    `;
-    
-    // Add the styles to the style element
-    style.textContent = css;
-    
-    // Append the style element to the head
-    document.head.appendChild(style);
+    } catch (error) {
+        console.error('Error adding top player styles:', error);
+    }
 }
 
 /**
- * Display achievements
+ * Display user achievements in the profile
  */
 function displayAchievements(achievements) {
+    // Get the achievements section element
+    const achievementsSection = document.querySelector('.achievement-section');
+    
+    // Check if achievements section exists
+    if (!achievementsSection) {
+        console.log('Achievements section not found, creating one');
+        
+        // Create achievements section
+        const newSection = document.createElement('div');
+        newSection.className = 'achievement-section';
+        
+        // Create section title
+        const sectionTitle = document.createElement('h3');
+        sectionTitle.className = 'section-title';
+        sectionTitle.innerHTML = '<i class="fas fa-medal"></i> Achievements';
+        
+        // Create achievements list container
+        const achievementsListContainer = document.createElement('div');
+        achievementsListContainer.id = 'achievementsList';
+        achievementsListContainer.className = 'achievements-list';
+        
+        // Assemble section
+        newSection.appendChild(sectionTitle);
+        newSection.appendChild(achievementsListContainer);
+        
+        // Insert before game history or actions row
+        const profileData = document.getElementById('profileData');
+        const gameHistory = document.querySelector('.game-history');
+        const actionsRow = document.querySelector('.actions-row');
+        
+        if (profileData) {
+            if (gameHistory) {
+                profileData.insertBefore(newSection, gameHistory);
+            } else if (actionsRow) {
+                profileData.insertBefore(newSection, actionsRow);
+            } else {
+                profileData.appendChild(newSection);
+            }
+        } else {
+            console.error('Profile data container not found');
+            return; // Exit if we can't append
+        }
+    }
+    
+    // Get the achievements list element
+    const achievementsList = document.getElementById('achievementsList');
+    
+    // Check if achievements list exists
+    if (!achievementsList) {
+        console.error('Achievements list not found');
+        return;
+    }
+    
+    // Add custom styles to fix layout issues if they don't exist already
+    if (!document.getElementById('achievement-fix-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'achievement-fix-styles';
+        styleEl.textContent = `
+            .achievements-list {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 15px;
+                width: 100%;
+            }
+            
+            .achievement {
+                display: flex;
+                align-items: center;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 10px;
+                padding: 12px;
+                transition: transform 0.3s ease;
+                overflow: hidden;
+            }
+            
+            .achievement-icon {
+                min-width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(59, 130, 246, 0.2);
+                border-radius: 50%;
+                margin-right: 12px;
+                flex-shrink: 0;
+            }
+            
+            .achievement-info {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+            }
+            
+            .achievement-name {
+                font-weight: 600;
+                margin-bottom: 3px;
+                color: #ffffff;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            
+            .achievement-desc {
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.7);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+            }
+            
+            @media (max-width: 600px) {
+                .achievements-list {
+                    grid-template-columns: 1fr;
+                }
+            }
+        `;
+        document.head.appendChild(styleEl);
+    }
+    
     // Clear previous achievements
     achievementsList.innerHTML = '';
     
@@ -990,56 +1438,34 @@ function displayAchievements(achievements) {
     
     // Add achievement items
     achievements.forEach(achievement => {
-        const achievementItem = document.createElement('div');
-        achievementItem.className = 'achievement';
-        
-        achievementItem.innerHTML = `
-            <div class="achievement-icon">
-                <i class="${achievement.icon}"></i>
-            </div>
-            <div class="achievement-info">
-                <div class="achievement-name">${achievement.name}</div>
-                <div class="achievement-desc">${achievement.description}</div>
-            </div>
-        `;
-        
-        achievementsList.appendChild(achievementItem);
-    });
-}
-
-/**
- * Display game history
- */
-function displayGameHistory(gameHistory) {
-    // Clear previous game history
-    gameHistoryList.innerHTML = '';
-    
-    if (!gameHistory || gameHistory.length === 0) {
-        gameHistoryList.innerHTML = `
-            <div class="game-record" style="justify-content: center;">
-                <p>No game history available.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    // Add game history items
-    gameHistory.forEach(game => {
-        const gameRecord = document.createElement('div');
-        gameRecord.className = 'game-record';
-        
-        // Determine if this was a high score game
-        const isHighScore = game.isHighScore;
-        
-        gameRecord.innerHTML = `
-            <div class="game-date">${game.date}</div>
-            <div class="game-score">${formatNumber(game.score)} pts</div>
-            <div class="score-badge ${isHighScore ? 'high-score' : ''}">
-                ${isHighScore ? 'Best Score' : 'Regular Game'}
-            </div>
-        `;
-        
-        gameHistoryList.appendChild(gameRecord);
+        try {
+            if (!achievement) return;
+            
+            const achievementItem = document.createElement('div');
+            achievementItem.className = 'achievement';
+            
+            // Use title/name property depending on which is available
+            const iconClass = achievement.icon?.startsWith('fa-') 
+                ? `fas ${achievement.icon}` 
+                : (achievement.icon || 'fas fa-award');
+                
+            const name = achievement.title || achievement.name || 'Achievement';
+            const description = achievement.description || 'Complete specific tasks to earn this achievement';
+            
+            achievementItem.innerHTML = `
+                <div class="achievement-icon">
+                    <i class="${iconClass}"></i>
+                </div>
+                <div class="achievement-info">
+                    <div class="achievement-name">${name}</div>
+                    <div class="achievement-desc">${description}</div>
+                </div>
+            `;
+            
+            achievementsList.appendChild(achievementItem);
+        } catch (error) {
+            console.error('Error displaying achievement:', error, achievement);
+        }
     });
 }
 
@@ -1064,7 +1490,7 @@ function animateProfileContent() {
     const sections = [
         document.querySelector('.profile-header'),
         document.querySelector('.achievement-section'),
-        document.querySelector('.game-history'),
+        document.querySelector('.referral-section'),
         document.querySelector('.actions-row')
     ];
     
@@ -1083,16 +1509,19 @@ function animateProfileContent() {
 }
 
 /**
- * Show error message
+ * Show error message in the profile
  */
 function showError(message) {
-    loadingState.style.display = 'none';
-    errorState.style.display = 'block';
-    profileData.style.display = 'none';
+    // Check if elements exist before manipulating them
+    if (loadingState) loadingState.style.display = 'none';
+    if (errorState) errorState.style.display = 'block';
+    if (profileData) profileData.style.display = 'none';
     
     const errorMessage = document.querySelector('.error-message');
     if (errorMessage) {
         errorMessage.textContent = message || 'Could not load the requested profile. The user may not exist or there was a connection error.';
+    } else {
+        console.error('Error message container not found. Error:', message);
     }
 }
 
@@ -1150,139 +1579,165 @@ function setupParticleAnimations() {
 }
 
 /**
- * Generate a referral link for a user
+ * Generate a referral link for the user
  */
 function generateReferralLink(userId, username) {
-    // Create a base URL for the referral
+    // Get the base URL from config or window.location
     const baseUrl = window.location.origin;
-    const path = window.location.pathname.replace('profile', '');
     
-    // Generate a secure referral code
-    const referralCode = btoa(encodeURIComponent(`${userId}:${username}`));
+    // We only need the user ID for the referral
+    const encodedUserId = encodeURIComponent(userId);
     
-    return `${baseUrl}${path}?ref=${referralCode}`;
+    // Generate the full referral link without .html extension for cleaner URLs
+    return `${baseUrl}/?ref=${encodedUserId}`;
 }
 
 /**
- * Copy referral link to clipboard
+ * Copy the referral link to clipboard
  */
 function copyReferralLink() {
-    const referralLink = document.getElementById('referralLinkInput').value;
+    const referralLinkInput = document.getElementById('referralLinkInput');
     
-    // Use navigator.clipboard API if available (more modern)
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(referralLink)
-            .then(() => {
-                showCopySuccess();
-            })
-            .catch(err => {
-                console.error('Failed to copy text: ', err);
-                fallbackCopy();
-            });
-    } else {
+    if (!referralLinkInput) {
+        console.error('Referral link input not found');
+        return;
+    }
+    
+    // Select the text field
+    referralLinkInput.select();
+    referralLinkInput.setSelectionRange(0, 99999); // For mobile devices
+    
+    try {
+        // Use modern navigator.clipboard API if available
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(referralLinkInput.value)
+                .then(() => {
+                    showCopySuccess();
+                })
+                .catch(err => {
+                    console.error('Navigator clipboard failed:', err);
+                    fallbackCopy();
+                });
+        } else {
+            // Fall back to document.execCommand (deprecated but useful as fallback)
+            fallbackCopy();
+        }
+    } catch (err) {
+        console.error('Copy failed:', err);
         fallbackCopy();
     }
     
+    // Fallback copy method using document.execCommand
     function fallbackCopy() {
-    // Create a temporary input element
-    const tempInput = document.createElement('input');
-    tempInput.value = referralLink;
-    document.body.appendChild(tempInput);
-    
-    // Select and copy the text
-    tempInput.select();
-    document.execCommand('copy');
-    
-    // Remove the temporary element
-    document.body.removeChild(tempInput);
-    
-    // Show success message
-        showCopySuccess();
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                showCopySuccess();
+            } else {
+                console.error('Fallback copy unsuccessful');
+            }
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+        }
     }
     
+    // Show success message
     function showCopySuccess() {
-    const copyButton = document.getElementById('copyReferralButton');
-    const originalText = copyButton.innerHTML;
-    copyButton.innerHTML = '<i class="fas fa-check"></i> Copied!';
-    copyButton.classList.add('success');
-    
-    // Reset after 2 seconds
-    setTimeout(() => {
-        copyButton.innerHTML = originalText;
-        copyButton.classList.remove('success');
-    }, 2000);
+        // Create success message if it doesn't exist
+        let successMessage = document.querySelector('.copy-success');
+        if (!successMessage) {
+            successMessage = document.createElement('div');
+            successMessage.className = 'copy-success';
+            successMessage.textContent = 'Link copied to clipboard!';
+            document.body.appendChild(successMessage);
+        }
+        
+        // Show the message
+        successMessage.style.display = 'block';
+        
+        // Hide after 2 seconds
+        setTimeout(() => {
+            successMessage.style.display = 'none';
+        }, 2000);
     }
 }
 
 /**
- * Share referral link using Web Share API (if available)
+ * Share the referral link using the Web Share API or fallback
  */
 function shareReferralLink() {
-    const referralLink = document.getElementById('referralLinkInput').value;
-    const shareText = `Join me on Hop Bunny and get 200 bonus points! Use my referral link:`;
+    const referralLinkInput = document.getElementById('referralLinkInput');
     
+    if (!referralLinkInput) {
+        console.error('Referral link input not found');
+        return;
+    }
+    
+    const referralLink = referralLinkInput.value;
+    const shareTitle = 'Join me in Hop Bunny!';
+    const shareText = 'Play Hop Bunny with me and earn bonus points!';
+    
+    // Check if Web Share API is available
     if (navigator.share) {
         navigator.share({
-            title: 'Join me on Hop Bunny!',
+            title: shareTitle,
             text: shareText,
             url: referralLink
         })
-        .then(() => console.log('Shared successfully'))
-        .catch(error => console.log('Error sharing:', error));
+        .then(() => {
+            console.log('Shared successfully');
+        })
+        .catch(error => {
+            console.error('Error sharing:', error);
+            fallbackShare();
+        });
     } else {
-        // Fallback for browsers that don't support Web Share API
-        // Try to open in common messaging apps
-        const shareUrl = encodeURIComponent(referralLink);
-        const shareMessage = encodeURIComponent(shareText + ' ');
+        fallbackShare();
+    }
+    
+    // Fallback sharing method
+    function fallbackShare() {
+        // On desktop, copy to clipboard
+        copyReferralLink();
         
-        // Open a popup with sharing options
-        const options = [
-            { name: 'WhatsApp', url: `https://wa.me/?text=${shareMessage}${shareUrl}` },
-            { name: 'Email', url: `mailto:?subject=Join me on Hop Bunny&body=${shareMessage}${shareUrl}` },
-            { name: 'Twitter', url: `https://twitter.com/intent/tweet?text=${shareMessage}${shareUrl}` }
-        ];
+        // Provide additional sharing options or instructions
+        let shareOptions = document.querySelector('.share-options');
         
-        // Create a simple modal to show options
-        const modal = document.createElement('div');
-        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
-        
-        const modalContent = document.createElement('div');
-        modalContent.style.cssText = 'background:#fff;border-radius:15px;width:300px;max-width:90%;padding:20px;';
-        
-        const heading = document.createElement('h3');
-        heading.textContent = 'Share via';
-        heading.style.cssText = 'margin-top:0;color:#333;text-align:center;';
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '&times;';
-        closeBtn.style.cssText = 'position:absolute;top:10px;right:15px;background:none;border:none;font-size:24px;cursor:pointer;';
-        closeBtn.onclick = () => document.body.removeChild(modal);
-        
-        const optionsDiv = document.createElement('div');
-        optionsDiv.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:15px;';
-        
-        options.forEach(option => {
-            const btn = document.createElement('a');
-            btn.href = option.url;
-            btn.target = '_blank';
-            btn.textContent = option.name;
-            btn.style.cssText = 'background:#3498db;color:#fff;padding:10px 15px;border-radius:5px;text-align:center;text-decoration:none;';
-            optionsDiv.appendChild(btn);
-        });
-        
-        modalContent.appendChild(heading);
-        modalContent.appendChild(closeBtn);
-        modalContent.appendChild(optionsDiv);
-        modal.appendChild(modalContent);
-        
-        document.body.appendChild(modal);
-        
-        // Close when clicking outside
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                document.body.removeChild(modal);
+        if (!shareOptions) {
+            shareOptions = document.createElement('div');
+            shareOptions.className = 'share-options';
+            
+            // Create options content
+            shareOptions.innerHTML = `
+                <div class="share-header">Share via:</div>
+                <div class="share-buttons">
+                    <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(referralLink)}" target="_blank" class="share-button twitter">
+                        <i class="fab fa-twitter"></i> Twitter
+                    </a>
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}" target="_blank" class="share-button facebook">
+                        <i class="fab fa-facebook"></i> Facebook
+                    </a>
+                    <a href="mailto:?subject=${encodeURIComponent(shareTitle)}&body=${encodeURIComponent(shareText + '\n\n' + referralLink)}" class="share-button email">
+                        <i class="fas fa-envelope"></i> Email
+                    </a>
+                </div>
+                <div class="share-close">Close</div>
+            `;
+            
+            // Add to page
+            const referralSection = document.querySelector('.referral-section');
+            if (referralSection) {
+                referralSection.appendChild(shareOptions);
+                
+                // Add close button functionality
+                shareOptions.querySelector('.share-close').addEventListener('click', () => {
+                    shareOptions.style.display = 'none';
+                });
             }
-        });
+        }
+        
+        // Show the options
+        shareOptions.style.display = 'block';
     }
 }
 
@@ -1402,14 +1857,19 @@ function getMockUserData(userId) {
 }
 
 /**
- * Add styles for the referral section
+ * Add CSS styles for the referral section
  */
 function addReferralStyles() {
-    // Create a style element
+    // Check if styles have already been added
+    if (document.getElementById('referral-styles')) {
+        return;
+    }
+    
+    // Create style element
     const style = document.createElement('style');
     style.id = 'referral-styles';
     
-    // Define styles for referral section
+    // Define styles
     const css = `
         .referral-section {
             background: rgba(255, 255, 255, 0.1);
@@ -1418,114 +1878,246 @@ function addReferralStyles() {
             margin-bottom: 30px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             backdrop-filter: blur(5px);
+            position: relative;
         }
         
         .referral-stats {
             display: flex;
-            justify-content: space-around;
+            align-items: center;
+            justify-content: center;
             margin-bottom: 20px;
             flex-wrap: wrap;
+            gap: 20px;
         }
         
         .stat-item {
             display: flex;
             align-items: center;
-            padding: 10px;
+            gap: 12px;
+            padding: 10px 15px;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
-            margin: 5px;
-            flex: 1;
             min-width: 180px;
-            max-width: 250px;
+            transition: transform 0.3s ease;
         }
         
-        .stat-item .stat-icon {
+        .stat-item:hover {
+            transform: translateY(-3px);
+        }
+        
+        .stat-icon {
             width: 40px;
             height: 40px;
-            border-radius: 50%;
-            background: rgba(52, 152, 219, 0.2);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 12px;
-        }
-        
-        .stat-item .stat-icon i {
-            font-size: 18px;
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 50%;
             color: #3498db;
+            font-size: 20px;
         }
         
-        .stat-item .stat-info {
+        .stat-info {
             flex: 1;
         }
         
-        .stat-item .stat-value {
-            font-size: 24px;
-            font-weight: 700;
+        .stat-value {
+            font-weight: 600;
+            font-size: 20px;
             margin-bottom: 3px;
             color: #ffffff;
         }
         
-        .stat-item .stat-label {
-            font-size: 14px;
+        .stat-label {
+            font-size: 12px;
             color: rgba(255, 255, 255, 0.7);
         }
         
         .referral-info {
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 15px;
             text-align: center;
-            padding: 0 10px;
+            margin-bottom: 15px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            line-height: 1.4;
         }
         
         .referral-link-group {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
+            align-items: stretch;
         }
         
         #referralLinkInput {
-            background: rgba(30, 30, 30, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 12px;
-            border-radius: 10px;
-            color: white;
-            font-size: 14px;
             width: 100%;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            padding: 12px 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
         }
         
         .referral-buttons {
             display: flex;
             gap: 10px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .referral-buttons .game-button {
+            flex: 1;
+            padding: 12px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
             justify-content: center;
         }
         
         .game-button.small-button {
-            padding: 8px 12px;
-            font-size: 14px;
-            min-width: 100px;
+            min-width: 0;
+            white-space: nowrap;
+        }
+        
+        .game-button.small-button i {
+            margin-right: 5px;
         }
         
         .game-button.success {
-            background-color: #2ecc71;
-            box-shadow: 0 4px 0 #27ae60;
+            background: #2ecc71;
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.4);
         }
         
-        .game-button.success:hover {
-            background-color: #27ae60;
-            box-shadow: 0 4px 0 #219d55;
+        /* Share options styles */
+        .share-options {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(41, 128, 185, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+            width: 90%;
+            max-width: 320px;
+            display: none;
+        }
+        
+        .share-header {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: white;
+        }
+        
+        .share-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .share-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            border-radius: 10px;
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .share-button i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        
+        .share-button.twitter {
+            background: #1DA1F2;
+        }
+        
+        .share-button.facebook {
+            background: #1877F2;
+        }
+        
+        .share-button.email {
+            background: #555;
+        }
+        
+        .share-button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+        
+        .share-close {
+            text-align: center;
+            margin-top: 15px;
+            padding: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        
+        .share-close:hover {
+            text-decoration: underline;
+        }
+        
+        /* Copy success message */
+        .copy-success {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(46, 204, 113, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            animation: fadeInOut 2s ease;
+            z-index: 1000;
+            display: none;
+        }
+        
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translate(-50%, -10px); }
+            10% { opacity: 1; transform: translate(-50%, 0); }
+            90% { opacity: 1; transform: translate(-50%, 0); }
+            100% { opacity: 0; transform: translate(-50%, -10px); }
         }
         
         @media (max-width: 500px) {
             .referral-link-group {
                 flex-direction: column;
+                width: 100%;
+            }
+            
+            .referral-buttons {
+                display: flex;
+                width: 100%;
+                gap: 8px;
+            }
+            
+            .referral-buttons .game-button {
+                flex: 1;
+                min-width: 0;
+                white-space: nowrap;
+                padding: 10px 0;
             }
             
             #referralLinkInput {
                 margin-bottom: 10px;
                 font-size: 12px;
                 padding: 10px;
+                width: 100%;
             }
             
             .stat-item {
@@ -1543,60 +2135,20 @@ function addReferralStyles() {
 }
 
 /**
- * Add enhanced styles for buttons
+ * Add enhanced button styles for the profile page
  */
 function enhanceButtonStyles() {
-    // Create a style element
+    // Check if styles have already been added
+    if (document.getElementById('enhanced-button-styles')) {
+        return;
+    }
+    
+    // Create style element
     const style = document.createElement('style');
     style.id = 'enhanced-button-styles';
     
-    // Define the improved button styles
+    // Define enhanced button styles
     const css = `
-        .game-button {
-            background: linear-gradient(135deg, #ff5f6d, #ff8e52) !important;
-            border: none !important;
-            border-radius: 30px !important;
-            box-shadow: 0 8px 20px rgba(255, 95, 109, 0.5) !important;
-            padding: 16px 25px !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            letter-spacing: 1px !important;
-            color: white !important;
-            transition: all 0.3s ease !important;
-            position: relative !important;
-            overflow: hidden !important;
-            z-index: 1 !important;
-            transform: translateY(0) !important;
-        }
-        
-        .game-button::before {
-            content: '' !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            background: linear-gradient(135deg, #ff8e52, #ff5f6d) !important;
-            opacity: 0 !important;
-            transition: opacity 0.3s ease !important;
-            z-index: -1 !important;
-            border-radius: 30px !important;
-        }
-        
-        .game-button:hover {
-            transform: translateY(-3px) !important;
-            box-shadow: 0 10px 25px rgba(255, 95, 109, 0.6) !important;
-        }
-        
-        .game-button:hover::before {
-            opacity: 1 !important;
-        }
-        
-        .game-button:active {
-            transform: translateY(1px) !important;
-            box-shadow: 0 5px 15px rgba(255, 95, 109, 0.4) !important;
-        }
-        
         .game-button.primary-button {
             background: linear-gradient(135deg, #5b9be2, #3498db) !important;
             box-shadow: 0 8px 20px rgba(52, 152, 219, 0.5) !important;
@@ -1626,6 +2178,7 @@ function enhanceButtonStyles() {
             gap: 20px !important;
             margin-top: 30px !important;
             margin-bottom: 30px !important;
+            padding-bottom: 60px !important; /* Add padding to prevent buttons from being cut off */
         }
         
         .actions-row .game-button {
@@ -1635,7 +2188,7 @@ function enhanceButtonStyles() {
             justify-content: center !important;
         }
         
-        /* For mobile */
+        /* For mobile devices */
         @media (max-width: 480px) {
             .game-button {
                 padding: 14px 20px !important;
@@ -1659,138 +2212,216 @@ function enhanceButtonStyles() {
     
     // Append the style element to the head
     document.head.appendChild(style);
-    
-    console.log('Enhanced button styles applied');
 }
 
 /**
- * Fetch leaderboard data to get the user's accurate rank
+ * Fetch leaderboard data to determine the user's rank
  */
 async function fetchLeaderboardDataForRank(userId) {
-    console.log('Fetching leaderboard data to determine accurate rank');
     try {
-        // Fetch users sorted by high score
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.users}?sortBy=score&sortDir=desc&limit=100`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        console.log('Fetching leaderboard rank for user:', userId);
         
-        if (!response.ok) {
-            throw new Error('Failed to fetch leaderboard data');
-        }
-        
-        const data = await response.json();
-        if (!data || !data.users || !Array.isArray(data.users)) {
-            throw new Error('Invalid leaderboard data format');
-        }
-        
-        // Find the user in the leaderboard and determine their rank
-        const users = data.users;
-        let userRank = 999;
-        
-        // Debugging: Log users data
-        console.log('Leaderboard data received:', users);
-        
-        users.forEach((user, index) => {
-            // Match by userId, uid, or _id to handle all possible ID formats
-            if (user.userId === userId || user.uid === userId || user._id === userId) {
-                userRank = index + 1; // +1 because array index is 0-based, but ranks start at 1
-                console.log(`Found user at rank ${userRank} in leaderboard with ID match`);
-            }
-        });
-        
-        // If we haven't found the user by ID, try by username as a fallback
-        if (userRank === 999) {
-            const username = localStorage.getItem('username') || sessionStorage.getItem('username');
-            if (username) {
-                users.forEach((user, index) => {
-                    if (user.username === username || user.displayName === username) {
-                        userRank = index + 1;
-                        console.log(`Found user at rank ${userRank} in leaderboard by username match`);
-                    }
-                });
+        // First check if leaderboard data is already cached by the leaderboard page
+        if (window.leaderboardCache && typeof window.leaderboardCache.get === 'function') {
+            const cachedData = window.leaderboardCache.get();
+            if (cachedData && Array.isArray(cachedData)) {
+                console.log('Using cached leaderboard data for rank');
+                // Find the user's position in the sorted cached list
+                const position = cachedData.findIndex(user => user.userId === userId);
+                
+                if (position !== -1) {
+                    // Add 1 because array indices are 0-based, but ranks start at 1
+                    const rank = position + 1;
+                    console.log(`User ${userId} is ranked #${rank} (from cache)`);
+                    return rank;
+                }
             }
         }
         
-        // Update localStorage with the accurate rank
-        localStorage.setItem('rank', userRank.toString());
-        localStorage.setItem('leaderboardRank', userRank.toString());
-        console.log('Updated localStorage with accurate leaderboard rank:', userRank);
+        // If no cached data, try to fetch from leaderboard function if available
+        if (window.fetchLeaderboardData && typeof window.fetchLeaderboardData === 'function') {
+            console.log('Fetching fresh leaderboard data from shared function');
+            const leaderboardData = await window.fetchLeaderboardData();
+            
+            if (leaderboardData && Array.isArray(leaderboardData)) {
+                // Find the user's position in the sorted list
+                const position = leaderboardData.findIndex(user => user.userId === userId);
+                
+                if (position !== -1) {
+                    // Add 1 because array indices are 0-based, but ranks start at 1
+                    const rank = position + 1;
+                    console.log(`User ${userId} is ranked #${rank} (from shared function)`);
+                    return rank;
+                }
+            }
+        }
         
-        return userRank;
+        // Fall back to direct Appwrite query as a last resort
+        console.log('Falling back to direct Appwrite query for rank');
+        const queries = [
+            Query.orderDesc('score'), // Sort by score descending
+            Query.limit(100) // Limit to 100 users
+        ];
+        
+        // Fetch users directly from Appwrite
+            const response = await databases.listDocuments(
+                config.databaseId,
+                config.usersCollectionId,
+                queries
+            );
+        
+        console.log('Leaderboard data fetched from Appwrite for rank calculation');
+            
+            if (!response || !response.documents) {
+                throw new Error('Invalid response from Appwrite');
+            }
+            
+        // Find the user's position in the sorted list
+        const position = response.documents.findIndex(user => user.$id === userId);
+        
+        if (position !== -1) {
+            // Add 1 because array indices are 0-based, but ranks start at 1
+            const rank = position + 1;
+            console.log(`User ${userId} is ranked #${rank} (from Appwrite query)`);
+                return rank;
+            } else {
+            console.log(`User ${userId} not found in leaderboard`);
+            // If user not found on leaderboard, return a high number
+            return 999;
+        }
     } catch (error) {
         console.error('Error fetching leaderboard data for rank:', error);
-        return null;
+        
+        // Try fallback method using API endpoint
+        try {
+            const response = await fetch(`${config.apiEndpoint}/leaderboard`);
+            if (response.ok) {
+            const data = await response.json();
+                
+                if (data && Array.isArray(data)) {
+                    // Find the user's position in the sorted list
+                    const position = data.findIndex(user => user.userId === userId);
+                    
+                    if (position !== -1) {
+                        // Add 1 because array indices are 0-based, but ranks start at 1
+                        const rank = position + 1;
+                        console.log(`User ${userId} is ranked #${rank} (via API fallback)`);
+                return rank;
+                    }
+                }
+            }
+        } catch (fallbackError) {
+            console.error('Error in fallback rank fetch:', fallbackError);
+        }
+        
+        // Return a default high rank if all methods fail
+        return 999;
     }
 }
 
-// Add this function to fetch the referral count directly
+/**
+ * Fetch the user's referral count from the API
+ */
 async function fetchReferralCount(userId) {
     try {
-        console.log(`Fetching referral count for user ${userId}`);
+        console.log('Fetching referral count for userId:', userId);
         
-        // TEMPORARY WORKAROUND: Since the actual API endpoint seems to be having issues,
-        // let's create a mock implementation that returns a value based on local storage
-        // or generates a reasonable random value if none exists
-        
-        // Check if we have a cached value in localStorage
-        const cachedCount = localStorage.getItem('referralCount') || sessionStorage.getItem('referralCount');
-        
-        // If we have a cached value, use it
-        if (cachedCount !== null) {
-            console.log('Using cached referral count:', cachedCount);
-            return parseInt(cachedCount);
-        }
-        
-        // Otherwise, generate a random count between 0 and 5
-        const randomCount = Math.floor(Math.random() * 6);
-        console.log('Generated random referral count:', randomCount);
-        
-        // Store this value for consistency
-        localStorage.setItem('referralCount', randomCount.toString());
-        sessionStorage.setItem('referralCount', randomCount.toString());
-        
-        return randomCount;
-        
-        /* ORIGINAL CODE - DISABLED FOR NOW
-        // Make sure we have a valid user ID
-        if (!userId) {
-            throw new Error('Invalid user ID');
-        }
-        
-        // Construct the URL directly
-        const url = `${API_BASE_URL.replace(/\/$/, '')}/referral/count/${userId}`;
-        console.log('Fetch URL:', url);
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
+        // Try to fetch from Appwrite first
+        try {
+            // Get the user document, which should include referral count
+            const userDoc = await databases.getDocument(
+                config.databaseId,
+                config.usersCollectionId,
+                userId
+            );
+            
+            if (userDoc && userDoc.referralCount !== undefined) {
+                console.log('Referral count from Appwrite:', userDoc.referralCount);
+                return userDoc.referralCount;
+            } else {
+                throw new Error('Referral count not found in Appwrite user document');
             }
-        });
-
-        console.log('Response status:', response.status);
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch referral count: ${response.status}`);
+        } catch (appwriteError) {
+            console.warn('Failed to fetch referral count from Appwrite, trying API endpoint:', appwriteError);
+            
+            // Fall back to API endpoint
+            const response = await fetch(`${config.apiEndpoint}/referral/stats/${userId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                cache: 'no-cache' // Always get fresh data
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch referral count from API');
+            }
+            
+            const data = await response.json();
+            console.log('Referral data from API:', data);
+            
+            if (data && data.referralCount !== undefined) {
+                return data.referralCount;
+            } else {
+                console.warn('Referral count not found in API response');
+                return 0;
+            }
         }
-
-        const data = await response.json();
-        console.log('Referral count API response:', data);
-        
-        // Update local storage
-        localStorage.setItem('referralCount', data.referralCount.toString());
-        sessionStorage.setItem('referralCount', data.referralCount.toString());
-        
-        return data.referralCount;
-        */
     } catch (error) {
         console.error('Error fetching referral count:', error);
-        // Return cached value if available
-        const cachedCount = parseInt(localStorage.getItem('referralCount') || sessionStorage.getItem('referralCount') || '0');
-        console.log('Using cached count:', cachedCount);
-        return cachedCount;
+        return 0;
+    }
+}
+
+/**
+ * Set up event listeners for profile tabs
+ */
+function setupProfileTabs() {
+    console.log('Setting up profile tabs');
+    // This function would handle tab navigation if your profile page had tabs
+    // Since the current profile design doesn't have tabs, this is a placeholder
+}
+
+/**
+ * Updates the referral count for a user
+ * @param {string} userId - The ID of the user to update
+ * @param {number} incrementBy - Amount to increment (default: 1)
+ * @returns {Promise<Object>} - The updated user document
+ */
+async function updateReferralCount(userId, incrementBy = 1) {
+    try {
+        console.log(`📊 Updating referral count for user: ${userId}`);
+        
+        // Get the current user document
+        const userDoc = await databases.getDocument(
+            config.databaseId,
+            config.usersCollectionId,
+            userId
+        );
+        
+        // Calculate current and new values
+        const currentCount = typeof userDoc.referralCount === 'number' 
+            ? userDoc.referralCount 
+            : parseInt(userDoc.referralCount || '0');
+        
+        const newCount = currentCount + incrementBy;
+        console.log(`📈 Referral count: ${currentCount} → ${newCount}`);
+        
+        // Update the document with new count
+        const updatedDoc = await databases.updateDocument(
+            config.databaseId,
+            config.usersCollectionId,
+            userId,
+            {
+                referralCount: newCount,
+                updatedAt: new Date().toISOString()
+            }
+        );
+        
+        console.log('✅ Successfully updated referral count!');
+        return updatedDoc;
+    } catch (error) {
+        console.error('❌ Error updating referral count:', error.message);
+        throw error;
     }
 } 

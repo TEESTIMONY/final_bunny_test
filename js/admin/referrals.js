@@ -20,7 +20,7 @@ onAuthStateChanged(auth, async (user) => {
   
   if (!user) {
     // Redirect to login page if not logged in
-    window.location.href = '/login.html?redirect=admin/referrals.html';
+    window.location.href = '/login?redirect=admin/referrals';
     return;
   }
   
@@ -30,7 +30,7 @@ onAuthStateChanged(auth, async (user) => {
     
     if (!userData || !userData.isAdmin) {
       // Redirect to home if not admin
-      window.location.href = '/index.html';
+      window.location.href = '/';
       return;
     }
     

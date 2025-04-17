@@ -3,13 +3,20 @@
  * Handles leaderboard data loading, display, and interaction
  */
 
-// API Configuration
-const API_BASE_URL = 'https://final-again-backend.vercel.app/api';
-const API_ENDPOINTS = {
-    users: '/users'
-};
+// Import Appwrite configuration
+import config from './config/appwrite.js';
 
-// Add caching for leaderboard data
+// Initialize Appwrite client
+const client = new Appwrite.Client()
+    .setEndpoint(config.endpoint)
+    .setProject(config.projectId);
+
+// Initialize Appwrite services
+const databases = new Appwrite.Databases(client);
+const account = new Appwrite.Account(client);
+const Query = Appwrite.Query; // Import Query from Appwrite
+
+// Cache for leaderboard data with 5-minute expiration
 const leaderboardCache = {
     data: null,
     timestamp: 0,
@@ -29,15 +36,24 @@ const leaderboardCache = {
 
     async update() {
         try {
-            const data = await fetchLeaderboardData();
-            if (data) {
-                this.set(data);
+            const freshData = await fetchLeaderboardData(true);
+            if (freshData) {
+                this.set(freshData);
+                return freshData;
             }
+            return null;
         } catch (error) {
             console.error('Error updating leaderboard cache:', error);
+            return null;
         }
     }
 };
+
+// Expose leaderboardCache to the global window object
+window.leaderboardCache = leaderboardCache;
+
+// Also expose the fetchLeaderboardData function globally
+window.fetchLeaderboardData = fetchLeaderboardData;
 
 // Start background updates
 setInterval(() => leaderboardCache.update(), 30 * 1000);
@@ -281,11 +297,12 @@ function addAnimationKeyframes() {
 }
 
 /**
- * Format date to YYYY-MM-DD
+ * Format date string to a readable format
  */
 function formatDate(dateString) {
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /**
@@ -295,56 +312,99 @@ function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-// Modify fetchLeaderboardData to use caching
-async function fetchLeaderboardData() {
-    // Check cache first
-    const cachedData = leaderboardCache.get();
-    if (cachedData) {
-        console.log('Using cached leaderboard data');
-        return cachedData;
+// Modified fetchLeaderboardData to use Appwrite
+async function fetchLeaderboardData(bypassCache = false) {
+    // Check cache first if not bypassing
+    if (!bypassCache) {
+        const cachedData = leaderboardCache.get();
+        if (cachedData) {
+            console.log('Using cached leaderboard data');
+            return cachedData;
+        }
+    } else {
+        console.log('Bypassing leaderboard cache, fetching fresh data');
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.users}?sortBy=score&sortDir=desc&limit=400`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        console.log('Fetching leaderboard data from Appwrite...');
         
-        if (!response.ok) {
-            throw new Error('Failed to fetch leaderboard data');
+        // Create Appwrite queries
+        const queries = [
+            Query.orderDesc('score'), // Sort by score descending
+            Query.limit(100) // Limit to 100 users
+        ];
+        
+        // Fetch users directly from Appwrite
+        const response = await databases.listDocuments(
+            config.databaseId,
+            config.usersCollectionId,
+            queries
+        );
+        
+        console.log('Appwrite response:', response);
+        
+        if (!response || !response.documents) {
+            throw new Error('Invalid response from Appwrite');
         }
         
-        const responseData = await response.json();
-        
-        // Check if the response has a data or users property
-        const data = responseData.data || responseData.users || responseData;
-        
-        // Ensure we have an array of users
-        if (!Array.isArray(data)) {
-            console.error('Unexpected API response format:', responseData);
-            throw new Error('Invalid API response format');
-        }
-        
-        // Map the data to ensure consistent format
-        const formattedData = data.map(user => ({
-            userId: user.userId || user.id || user._id,
-            username: user.username || user.displayName || 'Anonymous',
+        // Map the response to our expected format
+        const formattedData = response.documents.map(user => ({
+            userId: user.$id,
+            username: user.displayName || user.username || 'Anonymous',
             score: parseInt(user.score || user.highScore || 0),
             gamesPlayed: parseInt(user.gamesPlayed || 0)
         }));
         
-        // Sort by score in descending order
+        // Sort by score in descending order (even though Appwrite should already do this)
         formattedData.sort((a, b) => b.score - a.score);
         
         // Cache the formatted data
         leaderboardCache.set(formattedData);
         
+        console.log('Leaderboard data fetched successfully:', formattedData);
         return formattedData;
     } catch (error) {
-        console.error('Error fetching leaderboard data:', error);
-        return null;
+        console.error('Error fetching leaderboard data from Appwrite:', error);
+        
+        // Try the API endpoint as fallback
+        try {
+            console.log('Falling back to API endpoint...');
+            const response = await fetch(`${config.apiEndpoint}/users?sortBy=score&sortDir=desc&limit=100`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`API endpoint failed with status: ${response.status}`);
+            }
+            
+            const responseData = await response.json();
+            
+            // Check if the response has a users property
+            const users = responseData.users || [];
+            
+            // Map the data to ensure consistent format
+            const formattedData = users.map(user => ({
+                userId: user.uid,
+                username: user.displayName || user.username || 'Anonymous',
+                score: parseInt(user.score || user.highScore || 0),
+                gamesPlayed: parseInt(user.gamesPlayed || 0)
+            }));
+            
+            // Sort by score in descending order
+            formattedData.sort((a, b) => b.score - a.score);
+            
+            // Cache the formatted data
+            leaderboardCache.set(formattedData);
+            
+            console.log('Leaderboard data fetched via API:', formattedData);
+            return formattedData;
+        } catch (apiError) {
+            console.error('All fetch attempts failed:', apiError);
+            return null;
+        }
     }
 }
 
@@ -352,7 +412,17 @@ async function fetchLeaderboardData() {
  * Load and display user information on the top bar
  */
 function loadUserInfo() {
-    // Get user info from localStorage or sessionStorage (same approach as auth-checker.js)
+    // Try to refresh user score using the global function
+    if (window.refreshUserScore) {
+        console.log('Refreshing user score data to get latest values');
+        window.refreshUserScore().then(userData => {
+            console.log('User score refreshed:', userData);
+        }).catch(error => {
+            console.error('Error refreshing user score:', error);
+        });
+    }
+
+    // Get user info from localStorage or sessionStorage
     let username = localStorage.getItem('username') || sessionStorage.getItem('username');
     const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
     const score = localStorage.getItem('highScore') || sessionStorage.getItem('highScore') || 0;
@@ -371,39 +441,85 @@ function loadUserInfo() {
         
         // If we have a userId, try to fetch the latest data including proper username
         if (userId) {
-            // Fetch user data from API to get proper username
-            fetch(`${API_BASE_URL}/user/${userId}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            })
-            .then(response => {
-                if (!response.ok) throw new Error('Failed to fetch user data');
-                return response.json();
-            })
-            .then(data => {
-                console.log('User data fetched for header:', data);
-                
-                // Use the proper display name or username from the API
-                if (data.displayName || data.username) {
-                    const properUsername = data.displayName || data.username;
-                    console.log('Using proper username from API:', properUsername);
-                    currentUsernameElement.textContent = properUsername;
-                    
-                    // Update localStorage and sessionStorage with the proper username
-                    localStorage.setItem('username', properUsername);
-                    sessionStorage.setItem('username', properUsername);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching user data for header:', error);
-                // Keep using the default username if API fetch fails
-            });
+            // First try to clear cache for this user to get fresh data
+            if (window.userDataCache) {
+                window.userDataCache.clear(userId);
+            }
+
+            // Try to fetch using Appwrite SDK directly
+            try {
+                databases.getDocument(config.databaseId, config.usersCollectionId, userId)
+                    .then(user => {
+                        console.log('User data fetched from Appwrite for header:', user);
+                        
+                        // Use the proper display name or username from Appwrite
+                        if (user.displayName || user.username) {
+                            const properUsername = user.displayName || user.username;
+                            console.log('Using proper username from Appwrite:', properUsername);
+                            currentUsernameElement.textContent = properUsername;
+                            
+                            // Update localStorage and sessionStorage with the proper username
+                            localStorage.setItem('username', properUsername);
+                            sessionStorage.setItem('username', properUsername);
+                        }
+                        
+                        // Update score if available
+                        if (user.score || user.highScore) {
+                            const highestScore = Math.max(user.score || 0, user.highScore || 0);
+                            currentUserScoreElement.textContent = formatNumber(highestScore);
+                            localStorage.setItem('highScore', highestScore);
+                            sessionStorage.setItem('highScore', highestScore);
+                        }
+                    })
+                    .catch(error => {
+                        console.warn('Appwrite fetch failed, falling back to API:', error);
+                        
+                        // Fall back to API endpoint if Appwrite SDK fails
+                        fetch(`${config.apiEndpoint}/user/${userId}`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            }
+                        })
+                        .then(response => {
+                            if (!response.ok) throw new Error('Failed to fetch user data');
+                            return response.json();
+                        })
+                        .then(data => {
+                            console.log('User data fetched via API for header:', data);
+                            
+                            // Use the proper display name or username from the API
+                            if (data.displayName || data.username) {
+                                const properUsername = data.displayName || data.username;
+                                console.log('Using proper username from API:', properUsername);
+                                currentUsernameElement.textContent = properUsername;
+                                
+                                // Update localStorage and sessionStorage with the proper username
+                                localStorage.setItem('username', properUsername);
+                                sessionStorage.setItem('username', properUsername);
+                            }
+                            
+                            // Update score if available
+                            if (data.score || data.highScore) {
+                                const highestScore = Math.max(data.score || 0, data.highScore || 0);
+                                currentUserScoreElement.textContent = formatNumber(highestScore);
+                                localStorage.setItem('highScore', highestScore);
+                                sessionStorage.setItem('highScore', highestScore);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error fetching user data for header:', error);
+                            // Keep using the default username if API fetch fails
+                        });
+                    });
+            } catch (error) {
+                console.error('Error setting up Appwrite fetch:', error);
+                // Keep using the default username if Appwrite setup fails
+            }
         }
     } else {
-        // If no username found, use a placeholder (this should rarely happen since auth is required)
+        // If no username found, use a placeholder
         currentUsernameElement.textContent = "Guest Player";
         currentUserScoreElement.textContent = "0";
         
@@ -430,7 +546,7 @@ async function loadPlayerStats() {
         const currentUsername = localStorage.getItem('username') || sessionStorage.getItem('username');
         
         if (!currentUserId) {
-            // No user ID found, nothing to do since we removed the .your-rank section
+            // No user ID found, nothing to do
             console.log('No authenticated user found.');
             return;
         }
@@ -445,38 +561,61 @@ async function loadPlayerStats() {
             currentUser = window.allUsers.find(user => user.userId === currentUserId);
         }
         
-        // If not found in existing data, fetch directly from API
+        // If not found in existing data, fetch directly
         if (!currentUser) {
             try {
-                // Fetch direct from API for this specific user
-                const response = await fetch(`${API_BASE_URL}/user/${currentUserId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                // Try to fetch from Appwrite directly
+                try {
+                    const userDoc = await databases.getDocument(
+                        config.databaseId,
+                        config.usersCollectionId,
+                        currentUserId
+                    );
+                    
+                    console.log('Current user data fetched from Appwrite:', userDoc);
+                    
+                    currentUser = {
+                        userId: userDoc.$id,
+                        username: userDoc.displayName || userDoc.username || currentUsername,
+                        highScore: parseInt(userDoc.score || userDoc.highScore || 0),
+                        gamesPlayed: parseInt(userDoc.gamesPlayed || 0)
+                    };
+                    
+                    console.log('Current user data formatted from Appwrite:', currentUser);
+                } catch (appwriteError) {
+                    console.warn('Failed to fetch user stats via Appwrite:', appwriteError);
+                    
+                    // Fall back to API endpoint
+                    console.log('Falling back to API endpoint for user stats...');
+                    const response = await fetch(`${config.apiEndpoint}/user/${currentUserId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        currentUser = {
+                            userId: currentUserId,
+                            username: data.displayName || data.username || currentUsername,
+                            highScore: parseInt(data.score || data.highScore || 0),
+                            gamesPlayed: parseInt(data.gamesPlayed || 0)
+                        };
+                        
+                        console.log('Current user data fetched from API:', currentUser);
+                    } else {
+                        // If API call fails, use data from localStorage
+                        currentUser = {
+                            userId: currentUserId,
+                            username: currentUsername || 'Guest Player',
+                            highScore: parseInt(localStorage.getItem('highScore') || sessionStorage.getItem('highScore') || '0'),
+                            gamesPlayed: parseInt(localStorage.getItem('gamesPlayed') || sessionStorage.getItem('gamesPlayed') || '0')
+                        };
+                        
+                        console.log('Using localStorage for current user data:', currentUser);
                     }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    currentUser = {
-                        userId: currentUserId,
-                        username: data.username || data.displayName || currentUsername,
-                        highScore: data.score || data.score || 0,
-                        gamesPlayed: data.gamesPlayed || 0
-                    };
-                    
-                    console.log('Fetched current user data:', currentUser);
-                } else {
-                    // If API call fails, use data from localStorage
-                    currentUser = {
-                        userId: currentUserId,
-                        username: currentUsername || 'Guest Player',
-                        highScore: parseInt(localStorage.getItem('highScore') || sessionStorage.getItem('highScore') || '0'),
-                        gamesPlayed: parseInt(localStorage.getItem('gamesPlayed') || sessionStorage.getItem('gamesPlayed') || '0')
-                    };
-                    
-                    console.log('Using localStorage for current user data:', currentUser);
                 }
             } catch (error) {
                 console.error('Error fetching user data:', error);
@@ -488,25 +627,34 @@ async function loadPlayerStats() {
                     highScore: parseInt(localStorage.getItem('highScore') || sessionStorage.getItem('highScore') || '0'),
                     gamesPlayed: parseInt(localStorage.getItem('gamesPlayed') || sessionStorage.getItem('gamesPlayed') || '0')
                 };
+                
+                console.log('Error occurred, falling back to localStorage for user data:', currentUser);
             }
         }
         
-        // Update top bar with user info
+        // Update the UI with the user's stats
         if (currentUser) {
-            console.log('Displaying user data:', currentUser);
-            
-            // Update username and score in the top bar
-            if (currentUsernameElement) currentUsernameElement.textContent = currentUser.username || 'Guest Player';
-            if (currentUserScoreElement) currentUserScoreElement.textContent = formatNumber(currentUser.highScore || 0);
-            
-            // Save the updated data to localStorage (in case it was fetched from API)
-            if (localStorage.getItem('token')) {
+            // Update username display if available
+            if (currentUser.username && currentUsernameElement) {
+                currentUsernameElement.textContent = currentUser.username;
+                
+                // Update localStorage with latest username
                 localStorage.setItem('username', currentUser.username);
-                localStorage.setItem('highScore', currentUser.highScore);
-                localStorage.setItem('gamesPlayed', currentUser.gamesPlayed);
-            } else {
                 sessionStorage.setItem('username', currentUser.username);
+            }
+            
+            // Update score display if available
+            if (currentUser.highScore && currentUserScoreElement) {
+                currentUserScoreElement.textContent = formatNumber(currentUser.highScore);
+                
+                // Update localStorage with latest score
+                localStorage.setItem('highScore', currentUser.highScore);
                 sessionStorage.setItem('highScore', currentUser.highScore);
+            }
+            
+            // Update games played if available
+            if (currentUser.gamesPlayed) {
+                localStorage.setItem('gamesPlayed', currentUser.gamesPlayed);
                 sessionStorage.setItem('gamesPlayed', currentUser.gamesPlayed);
             }
         }
@@ -617,6 +765,20 @@ async function refreshLeaderboard() {
         // Clear local cache of users
         window.allUsers = null;
         
+        // Clear leaderboard cache
+        leaderboardCache.data = null;
+        leaderboardCache.timestamp = 0;
+        
+        // Force refresh user score data
+        if (window.refreshUserScore) {
+            try {
+                await window.refreshUserScore();
+                console.log('User score refreshed during leaderboard refresh');
+            } catch (error) {
+                console.error('Error refreshing user score during leaderboard refresh:', error);
+            }
+        }
+        
         // Load fresh data from API
         await loadLeaderboardData();
         
@@ -627,7 +789,7 @@ async function refreshLeaderboard() {
         leaderboardContainer.classList.add('refreshed');
         
         // Reset the refresh button
-        refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i> <span>REFRESH</span>';
         refreshButton.disabled = false;
         
         // Add animation to user info bar
@@ -647,7 +809,7 @@ async function refreshLeaderboard() {
         
         // Reset the refresh button
         const refreshButton = document.getElementById('refreshButton');
-        refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i> <span>REFRESH</span>';
         refreshButton.disabled = false;
         
         // Remove loading class
@@ -655,7 +817,7 @@ async function refreshLeaderboard() {
         leaderboardContainer.classList.remove('loading');
         
         // Display error in UI
-        displayErrorMessage('Failed to refresh leaderboard data. Please try again later.');
+        showMessage('Failed to refresh leaderboard data. Please try again later.', 'error');
     }
 }
 
@@ -680,11 +842,11 @@ async function fetchUserRank(userId) {
     const leaderboardData = await fetchLeaderboardData();
     if (!leaderboardData) return null;
 
-    const userIndex = leaderboardData.findIndex(user => user.id === userId);
+    const userIndex = leaderboardData.findIndex(user => user.userId === userId);
     return userIndex >= 0 ? userIndex + 1 : null;
 }
 
-// Modify the fetchCurrentUserData function to use the global cache
+// Modify the fetchCurrentUserData function to use Appwrite
 async function fetchCurrentUserData(currentUserId) {
     // Check the global user data cache first
     const cachedData = window.userDataCache?.get(currentUserId);
@@ -694,25 +856,69 @@ async function fetchCurrentUserData(currentUserId) {
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/user/${currentUserId}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
+        console.log('Fetching current user data via Appwrite...');
+        
+        // Try to get user directly from Appwrite
+        try {
+            const userDoc = await databases.getDocument(
+                config.databaseId,
+                config.usersCollectionId,
+                currentUserId
+            );
+            
+            console.log('User document fetched via Appwrite:', userDoc);
+            
+            // Format the user data
+            const userData = {
+                userId: userDoc.$id,
+                username: userDoc.displayName || userDoc.username || 'Anonymous',
+                score: parseInt(userDoc.score || userDoc.highScore || 0),
+                highScore: parseInt(userDoc.highScore || 0),
+                gamesPlayed: parseInt(userDoc.gamesPlayed || 0),
+                createdAt: userDoc.createdAt
+            };
+            
+            // Cache the data if the cache exists
+            if (window.userDataCache) {
+                window.userDataCache.set(currentUserId, userData);
             }
-        });
+            
+            return userData;
+        } catch (appwriteError) {
+            console.warn('Failed to fetch user via Appwrite:', appwriteError);
+            
+            // Fall back to API endpoint
+            console.log('Falling back to API endpoint...');
+            const response = await fetch(`${config.apiEndpoint}/user/${currentUserId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch current user data');
-        }
+            if (!response.ok) {
+                throw new Error('Failed to fetch current user data');
+            }
 
-        const data = await response.json();
-        
-        // Cache the data if the cache exists
-        if (window.userDataCache) {
-            window.userDataCache.set(currentUserId, data);
+            const data = await response.json();
+            
+            // Format the user data
+            const userData = {
+                userId: data.uid || data.$id || currentUserId,
+                username: data.displayName || data.username || 'Anonymous',
+                score: parseInt(data.score || data.highScore || 0),
+                highScore: parseInt(data.highScore || 0),
+                gamesPlayed: parseInt(data.gamesPlayed || 0),
+                createdAt: data.createdAt
+            };
+            
+            // Cache the data if the cache exists
+            if (window.userDataCache) {
+                window.userDataCache.set(currentUserId, userData);
+            }
+            
+            return userData;
         }
-        
-        return data;
     } catch (error) {
         console.error('Error fetching current user data:', error);
         return null;

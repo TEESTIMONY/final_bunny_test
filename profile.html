@@ -403,7 +403,7 @@
                     <div class="error-message">
                         Could not load the requested profile. The user may not exist or there was a connection error.
                     </div>
-                    <button class="game-button primary-button" onclick="window.location.href='leaderboard.html'" ontouchstart="">
+                    <button class="game-button primary-button" onclick="window.location.href='/leaderboard'" ontouchstart="">
                         <i class="fas fa-arrow-left"></i> <span>BACK TO LEADERBOARD</span>
                     </button>
                 </div>
@@ -449,11 +449,11 @@
                     </div>
                     
                     <div class="actions-row">
-                        <button class="game-button primary-button" onclick="window.location.href='leaderboard.html'" ontouchstart="">
+                        <button class="game-button primary-button" onclick="window.location.href='/leaderboard'" ontouchstart="">
                             <i class="fas fa-trophy"></i> <span>LEADERBOARD</span>
                         </button>
                         
-                        <button class="game-button primary-button" onclick="window.location.href='index.html'" ontouchstart="">
+                        <button class="game-button primary-button" onclick="window.location.href='/'" ontouchstart="">
                             <i class="fas fa-gamepad"></i> <span>PLAY GAME</span>
                         </button>
                     </div>
@@ -468,8 +468,9 @@
     </div>
 
     <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@11.0.0"></script>
     <script src="js/utils.js"></script>
-    <script src="js/profile.js"></script>
+    <script type="module" src="js/profile.js"></script>
     <script src="js/profile-navigation.js"></script>
 </body>
 </html> 

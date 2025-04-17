@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // If no token found in either storage, redirect to auth page
         if (!tokenFromStorage && !tokenFromSession) {
             console.log('No authentication token found, redirecting to auth page');
-            window.location.href = 'auth.html';
+            window.location.href = '/auth';
             return false;
         }
         
@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Make the element clickable to go to profile
         usernameElement.style.cursor = 'pointer';
         usernameElement.addEventListener('click', () => {
-            window.location.href = 'profile.html';
+            window.location.href = '/profile';
         });
         
         // Add tooltip
@@ -421,7 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sessionStorage.removeItem('highScore');
         
         // Redirect to auth page
-        window.location.href = 'auth.html';
+        window.location.href = '/auth';
     });
     
     // Find the play and leaderboard buttons

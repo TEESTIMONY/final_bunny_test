@@ -1934,7 +1934,7 @@ body.tiny-screen .footer-text {
 /* Secondary button style */
 .game-button.secondary-button {
     background: #39547B;
-    margin-top: 0px; /* Decreased from default margin */
+    margin-top: 0px;
     padding: 12px 25px;
     font-size: 16px;
 }
@@ -1953,6 +1953,29 @@ body.tiny-screen .footer-text {
 
 .game-button.secondary-button::before {
     background: linear-gradient(to right, #34495e, #2c3e50);
+}
+
+/* Blue button style for logout */
+.game-button.blue-button {
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    box-shadow: 
+        0 6px 0 #1a5276,
+        0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.game-button.blue-button:hover {
+    background: linear-gradient(to bottom, #4dabf7, #3498db);
+    box-shadow: 
+        0 9px 0 #1a5276,
+        0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+.game-button.blue-button:active {
+    transform: translateY(3px);
+    background: linear-gradient(to bottom, #2980b9, #3498db);
+    box-shadow: 
+        0 3px 0 #1a5276,
+        0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
 /* Game over buttons container */
@@ -2072,4 +2095,33 @@ body.tiny-screen .footer-text {
     .actions-row .game-button {
         margin-bottom: 10px;
     }
+}
+
+.text-button {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.9rem;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: color 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.text-button:hover {
+    color: white;
+}
+
+.text-button i {
+    font-size: 0.9rem;
+}
+
+.footer-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
 } 

@@ -22,7 +22,7 @@ function makeUserInfoBarClickable() {
         // Add click event to navigate to the profile page
         userInfoBar.addEventListener('click', () => {
             // Simply navigate to the profile page
-            window.location.href = 'profile.html';
+            window.location.href = '/profile';
         });
         
         // Add hover effect styles for the user info bar

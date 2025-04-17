@@ -1,3 +1,6 @@
+// Import the Game class
+import { Game } from './game.js';
+
 /**
  * Main entry point for the game
  */
@@ -215,7 +218,7 @@ function setupStartScreen() {
         leaderboardButtonGameOver.classList.remove('active-touch');
         
         // Navigate to leaderboard page
-        window.location.href = 'leaderboard.html';
+        window.location.href = '/leaderboard';
     }
     
     // Remove any existing event listeners to avoid duplicate handlers
@@ -447,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const handleLeaderboardClick = (e) => {
                 e.preventDefault();
                 console.log('Navigating to leaderboard from game over screen');
-                window.location.href = 'leaderboard.html';
+                window.location.href = '/leaderboard';
             };
             
             // Ensure it has the correct click handler

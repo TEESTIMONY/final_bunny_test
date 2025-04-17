@@ -22,6 +22,13 @@
         
         <!-- <div id="score">0</div> -->
         
+        <!-- Username display positioned in top right corner -->
+        <div class="user-welcome-container">
+            <div id="usernameDisplay" class="username-display">
+                <span id="usernameText"></span>
+            </div>
+        </div>
+        
         <!-- Start screen - shown after authentication -->
         <div id="startScreen" class="overlay">
             <div class="particles-container">
@@ -56,7 +63,11 @@
                     <i class="fas fa-play"></i> PLAY
                 </button>
                 
-                <button id="leaderboardButton" class="game-button secondary-button" onclick="window.location.href='leaderboard.html'" ontouchstart="">
+                <button id="logoutButton" class="game-button secondary-button blue-button" ontouchstart="">
+                    <i class="fas fa-sign-out-alt"></i> LOGOUT
+                </button>
+                
+                <button id="leaderboardButton" class="game-button secondary-button" onclick="window.location.href='/leaderboard'" ontouchstart="">
                     <i class="fas fa-trophy"></i> LEADERBOARD
                 </button>
             </div>
@@ -93,7 +104,7 @@
                     <i class="fas fa-redo-alt"></i> TRY AGAIN
                 </button>
                 
-                <button id="leaderboardButtonGameOver" class="game-button secondary-button" onclick="window.location.href='leaderboard.html'" ontouchstart="">
+                <button id="leaderboardButtonGameOver" class="game-button secondary-button" onclick="window.location.href='/leaderboard'" ontouchstart="">
                     <i class="fas fa-trophy"></i> LEADERBOARD
                 </button>
             </div>
@@ -102,14 +113,15 @@
     </div>
 
     <!-- Game scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+    <script type="module" src="js/config/appwrite.js"></script>
+    <script type="module" src="js/auth-check.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/entities/player.js"></script>
     <script src="js/entities/platform.js"></script>
     <script src="js/entities/enemy.js"></script>
     <script src="js/entities/powerup.js"></script>
-    <script src="js/game.js"></script>
-    <script src="js/main.js"></script>
-    <script src="js/auth-checker.js"></script>
-    <script src="js/profile-navigation.js"></script>
+    <script type="module" src="js/game.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html> 

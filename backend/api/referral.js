@@ -286,4 +286,156 @@ router.post('/update-count', async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/referral/process-signup-referral
+ * @desc Process a referral during signup - Award 500 points to referrer and 200 points to the new user
+ * @access Public
+ */
+router.post('/process-signup-referral', async (req, res) => {
+  try {
+    const { referrerId, newUserId, newUsername } = req.body;
+    
+    // Validate input
+    if (!referrerId || !newUserId) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Both referrer ID and new user ID are required' 
+      });
+    }
+    
+    console.log(`Processing signup referral: Referrer ${referrerId} referred new user ${newUserId}`);
+    
+    // Check if the referrer exists
+    let referrerDoc;
+    try {
+      referrerDoc = await databases.getDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        referrerId
+      );
+    } catch (error) {
+      console.error('Error fetching referrer:', error);
+      return res.status(404).json({ 
+        success: false,
+        message: 'Referrer not found' 
+      });
+    }
+    
+    // Check if the new user exists
+    let newUserDoc;
+    try {
+      newUserDoc = await databases.getDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        newUserId
+      );
+    } catch (error) {
+      console.error('Error fetching new user:', error);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'New user not found' 
+      });
+    }
+    
+    // Check if this referral has already been processed
+    const existingReferral = await databases.listDocuments(
+      DATABASE_ID,
+      REFERRALS_COLLECTION_ID,
+      [
+        databases.equal("referrerId", referrerId),
+        databases.equal("referredId", newUserId)
+      ]
+    );
+    
+    if (existingReferral.total > 0) {
+      return res.status(200).json({ 
+        success: false,
+        message: 'This referral has already been processed',
+        existingReferral: existingReferral.documents[0]
+      });
+    }
+    
+    // Get current referral count
+    const currentReferralCount = referrerDoc.referralCount || 0;
+    
+    // Begin transaction by creating a promise array
+    const updatePromises = [];
+    
+    // 1. Update referrer: add 500 points to score and increment referral count
+    updatePromises.push(
+      databases.updateDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        referrerId,
+        {
+          score: (referrerDoc.score || 0) + 500,
+          referralBonus: (referrerDoc.referralBonus || 0) + 500,
+          referralCount: currentReferralCount + 1,
+          updatedAt: new Date().toISOString()
+        }
+      )
+    );
+    
+    // 2. Update new user: add 200 points to their score
+    // (We don't update the score here as it should be set during account creation)
+    // But we do record that they received a referral bonus
+    updatePromises.push(
+      databases.updateDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        newUserId,
+        {
+          referralBonus: 200,
+          updatedAt: new Date().toISOString()
+        }
+      )
+    );
+    
+    // 3. Record the referral relationship
+    updatePromises.push(
+      databases.createDocument(
+        DATABASE_ID,
+        REFERRALS_COLLECTION_ID,
+        'unique()',
+        {
+          referrerId: referrerId,
+          referredId: newUserId,
+          referrerUsername: referrerDoc.username || referrerDoc.displayName,
+          referredUsername: newUsername || newUserDoc.username || newUserDoc.displayName,
+          referrerBonus: 500,
+          referredBonus: 200,
+          status: 'complete',
+          processedAt: new Date().toISOString()
+        }
+      )
+    );
+    
+    // Execute all updates
+    await Promise.all(updatePromises);
+    
+    console.log(`Signup referral processed successfully: ${referrerId} referred ${newUserId}`);
+    
+    // Return success response
+    return res.status(200).json({
+      success: true,
+      message: 'Referral processed successfully',
+      data: {
+        referrerId: referrerId,
+        newUserId: newUserId,
+        referrerBonus: 500,
+        newUserBonus: 200,
+        referrerUsername: referrerDoc.username || referrerDoc.displayName
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error processing signup referral:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error processing signup referral', 
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router; 

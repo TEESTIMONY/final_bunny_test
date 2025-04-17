@@ -81,7 +81,7 @@
             
             <!-- Action buttons -->
             <div class="leaderboard-buttons">
-                <button id="backToGameButton" class="game-button primary-button" onclick="window.location.href='index.html'" ontouchstart="">
+                <button id="backToGameButton" class="game-button primary-button" onclick="window.location.href='/'" ontouchstart="">
                     <i class="fas fa-gamepad"></i> <span>PLAY GAME</span>
                 </button>
                 
@@ -98,8 +98,9 @@
     </div>
 
     <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@11.0.0"></script>
     <script src="js/utils.js"></script>
-    <script src="js/leaderboard.js"></script>
+    <script type="module" src="js/leaderboard.js"></script>
     <script src="js/profile-navigation.js"></script>
 </body>
 </html> 

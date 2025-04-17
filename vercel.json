@@ -11,5 +11,13 @@
       "src": "/api/(.*)",
       "dest": "/api/$1"
     }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/:path", "destination": "/:path.html" }
+  ],
+  "redirects": [
+    { "source": "/index", "destination": "/" }
   ]
 } 
