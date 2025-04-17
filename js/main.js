@@ -474,6 +474,41 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Leaderboard button not found in game over screen');
         }
         
+        // Set up the Home button
+        const homeButton = document.getElementById('homeButton');
+        if (homeButton) {
+            homeButton.style.display = 'flex';
+            homeButton.style.opacity = '1';
+            homeButton.style.visibility = 'visible';
+            
+            // Define home button handler
+            const handleHomeClick = (e) => {
+                e.preventDefault();
+                console.log('Navigating to home from game over screen');
+                window.location.href = '/';
+            };
+            
+            // Ensure it has the correct click handler
+            homeButton.removeEventListener('click', handleHomeClick);
+            homeButton.removeEventListener('touchend', handleHomeClick);
+            
+            homeButton.addEventListener('click', handleHomeClick);
+            homeButton.addEventListener('touchend', handleHomeClick);
+            
+            // Add visual feedback for touch
+            homeButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                homeButton.classList.add('active-touch');
+            });
+            
+            // Handle touch cancel
+            homeButton.addEventListener('touchcancel', () => {
+                homeButton.classList.remove('active-touch');
+            });
+        } else {
+            console.error('Home button not found in game over screen');
+        }
+        
         // Update score display
         finalScore.textContent = score;
         

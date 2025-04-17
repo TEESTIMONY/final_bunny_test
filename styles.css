@@ -1967,16 +1967,15 @@ body.tiny-screen .footer-text {
 .game-button.blue-button:hover {
     background: linear-gradient(to bottom, #4dabf7, #3498db);
     box-shadow: 
-        0 9px 0 #1a5276,
+        0 8px 0 #1a5276,
         0 15px 30px rgba(0, 0, 0, 0.4);
 }
 
-.game-button.blue-button:active {
+.game-button.blue-button:active,
+.game-button.blue-button.active-touch {
     transform: translateY(3px);
     background: linear-gradient(to bottom, #2980b9, #3498db);
-    box-shadow: 
-        0 3px 0 #1a5276,
-        0 5px 15px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 3px 0 #1a5276, 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
 /* Game over buttons container */
@@ -2042,6 +2041,20 @@ body.tiny-screen .footer-text {
 #leaderboardButton {
     margin-top: 0;
     transition: all 0.3s ease;
+}
+
+/* Style specifically for the home button in game over screen */
+#homeButton {
+    margin-top: 10px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    opacity: 1;
+    visibility: visible;
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    box-shadow: 0 6px 0 #1a5276, 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 
 /* Fixed styling for profile buttons to prevent cutoff */
@@ -2125,4 +2138,25 @@ body.tiny-screen .footer-text {
     flex-direction: column;
     align-items: center;
     gap: 10px;
+}
+
+/* Add specific styling for blue-button in game-over context */
+.game-over-buttons .game-button.blue-button {
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    box-shadow: 0 6px 0 #1a5276, 0 10px 25px rgba(0, 0, 0, 0.3);
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.game-over-buttons .game-button.blue-button:hover {
+    background: linear-gradient(to bottom, #4dabf7, #3498db);
+    box-shadow: 0 8px 0 #1a5276, 0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+.game-over-buttons .game-button.blue-button:active,
+.game-over-buttons .game-button.blue-button.active-touch {
+    transform: translateY(3px);
+    background: linear-gradient(to bottom, #2980b9, #3498db);
+    box-shadow: 0 3px 0 #1a5276, 0 5px 15px rgba(0, 0, 0, 0.3);
 } 

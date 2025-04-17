@@ -298,6 +298,21 @@ export class Game {
                 // Restart the game
                 this.restart();
             }
+            
+            // Check if interaction is within the home button bounds
+            if (this.homeButtonBounds && 
+                x >= this.homeButtonBounds.x && 
+                x <= this.homeButtonBounds.x + this.homeButtonBounds.width &&
+                y >= this.homeButtonBounds.y && 
+                y <= this.homeButtonBounds.y + this.homeButtonBounds.height) {
+                
+                // Remove all event listeners
+                this.canvas.removeEventListener('click', handleInteraction);
+                this.canvas.removeEventListener('touchend', handleInteraction);
+                
+                // Navigate to home page
+                window.location.href = '/';
+            }
         };
         
         // Add event listeners for both mouse and touch
@@ -1663,6 +1678,41 @@ export class Game {
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText('TRY AGAIN', centerX, buttonY + buttonHeight / 2);
         
+        // Draw home button below the restart button
+        const homeButtonY = buttonY + buttonHeight + 20;
+        
+        // Home button gradient (blue colors)
+        const homeButtonGradient = this.ctx.createLinearGradient(
+            buttonX, 
+            homeButtonY, 
+            buttonX + buttonWidth, 
+            homeButtonY + buttonHeight
+        );
+        homeButtonGradient.addColorStop(0, '#3498db');  // Blue
+        homeButtonGradient.addColorStop(1, '#2980b9');  // Darker blue
+        
+        // Home button shadow
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 5;
+        
+        // Draw rounded home button
+        this.ctx.fillStyle = homeButtonGradient;
+        this.ctx.beginPath();
+        this.ctx.roundRect(buttonX, homeButtonY, buttonWidth, buttonHeight, [30]);
+        this.ctx.fill();
+        
+        // Home button text
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('HOME', centerX, homeButtonY + buttonHeight / 2);
+        
         // Add fun characters to game over screen
         this.drawGameOverCharacters();
         
@@ -1672,6 +1722,14 @@ export class Game {
         this.restartButtonBounds = {
             x: buttonX,
             y: buttonY,
+            width: buttonWidth,
+            height: buttonHeight
+        };
+
+        // Store home button position for click handling
+        this.homeButtonBounds = {
+            x: buttonX,
+            y: homeButtonY,
             width: buttonWidth,
             height: buttonHeight
         };
