@@ -7,13 +7,11 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/:path", "destination": "/:path.html" }
+    { "source": "/api/(.*)", "destination": "/api/$1" }
   ],
   "redirects": [
-    { "source": "/index", "destination": "/" },
-    { "source": "/", "destination": "/auth" }
+    { "source": "/", "destination": "/auth.html" },
+    { "source": "/index", "destination": "/auth.html" }
   ],
-  "cleanUrls": true,
   "trailingSlash": false
 } 
