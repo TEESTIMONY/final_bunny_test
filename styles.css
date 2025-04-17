@@ -1430,7 +1430,7 @@ body {
     padding: 12px 20px;
     border-radius: 10px;
     font-size: 14px;
-    display: flex;
+    display: none;
     align-items: center;
     gap: 10px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
@@ -1511,6 +1511,7 @@ body {
     font-weight: 500;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+    display: none;
 }
 
 @keyframes shake {

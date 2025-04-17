@@ -286,6 +286,9 @@ document.addEventListener('DOMContentLoaded', () => {
         registerTab.classList.remove('active');
         loginForm.classList.remove('hidden');
         registerForm.classList.add('hidden');
+        // Hide error messages when switching tabs
+        loginError.style.display = 'none';
+        registerError.style.display = 'none';
     });
 
     registerTab.addEventListener('click', () => {
@@ -293,6 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loginTab.classList.remove('active');
         registerForm.classList.remove('hidden');
         loginForm.classList.add('hidden');
+        // Hide error messages when switching tabs
+        loginError.style.display = 'none';
+        registerError.style.display = 'none';
     });
 
     // Check if user is already logged in - do this check only once
@@ -306,6 +312,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Form submission
     loginButton.addEventListener('click', async (e) => {
         e.preventDefault();
+        
+        // Hide any previous error message
+        loginError.style.display = 'none';
         
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
@@ -408,13 +417,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (error.message.includes('Invalid credentials')) {
                 errorMessage = 'Invalid email or password';
             }
-            loginError.textContent = errorMessage;
-            loginError.style.display = 'block';
+            showErrorWithAutoHide(loginError, errorMessage);
         }
     });
 
     registerButton.addEventListener('click', async (e) => {
         e.preventDefault();
+        
+        // Hide any previous error message
+        registerError.style.display = 'none';
         
         const username = document.getElementById('registerUsername').value;
         const email = document.getElementById('registerEmail').value;
@@ -423,10 +434,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Validate passwords match
         if (password !== confirmPassword) {
-            registerError.textContent = 'Passwords do not match';
-            registerError.style.display = 'block';
-                return;
-            }
+            showErrorWithAutoHide(registerError, 'Passwords do not match');
+            return;
+        }
 
         try {
             // Create user account in Appwrite
@@ -515,8 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (error.message.includes('password')) {
                 errorMessage = 'Password must be at least 8 characters long';
             }
-            registerError.textContent = errorMessage;
-            registerError.style.display = 'block';
+            showErrorWithAutoHide(registerError, errorMessage);
         }
     });
     
@@ -1118,6 +1127,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return null;
     };
+
+    // Add a function to show errors with auto-hide after 5 seconds
+    function showErrorWithAutoHide(errorElement, errorMessage) {
+        // Set the error message text
+        errorElement.textContent = errorMessage;
+        // Display the error
+        errorElement.style.display = 'block';
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            errorElement.style.display = 'none';
+        }, 5000);
+    }
 });
 
 // Export the updateUsernameFromDatabase function
