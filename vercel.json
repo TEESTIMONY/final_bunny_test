@@ -1,9 +1,13 @@
 {
   "version": 2,
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "^/$", "status": 307, "dest": "/auth.html" },
-    { "src": "/index", "status": 307, "dest": "/auth.html" },
-    { "src": "/(.*)", "dest": "/$1" }
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/:path", "destination": "/:path.html" }
+  ],
+  "redirects": [
+    { "source": "^/$", "destination": "/auth", "permanent": false },
+    { "source": "/index", "destination": "/auth", "permanent": false }
   ]
 } 
