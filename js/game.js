@@ -78,7 +78,8 @@ export class Game {
             powerUp: null,
             enemyDeath: null,
             playerDeath: null,
-            milestone: null
+            milestone: null,
+            backgroundMusic: null
         };
         
         // Initialize game entities
@@ -158,7 +159,8 @@ export class Game {
             powerUp: null,
             enemyDeath: null,
             playerDeath: null,
-            milestone: null
+            milestone: null,
+            backgroundMusic: null
         };
         
         // Try to load audio files, but don't block game if they don't exist
@@ -169,6 +171,11 @@ export class Game {
             const enemyDeathAudio = new Audio('assets/enemy_death.mp3');
             const playerDeathAudio = new Audio('assets/player_death.mp3');
             const milestoneAudio = new Audio('assets/milestone.mp3');
+            
+            // Create background music audio object
+            const backgroundMusicAudio = new Audio('assets/background_music.mp3');
+            backgroundMusicAudio.loop = true;  // Make it loop continuously
+            backgroundMusicAudio.volume = 0.3; // Lower volume for background music
             
             // Set audio properties
             [jumpAudio, powerUpAudio, enemyDeathAudio, playerDeathAudio, milestoneAudio].forEach(audio => {
@@ -186,7 +193,8 @@ export class Game {
                 powerUp: powerUpAudio,
                 enemyDeath: enemyDeathAudio,
                 playerDeath: playerDeathAudio,
-                milestone: milestoneAudio
+                milestone: milestoneAudio,
+                backgroundMusic: backgroundMusicAudio
             };
             
             // Check if audio should be muted based on user preference
@@ -200,7 +208,8 @@ export class Game {
                 powerUp: null,
                 enemyDeath: null,
                 playerDeath: null,
-                milestone: null
+                milestone: null,
+                backgroundMusic: null
             };
         }
     }
@@ -231,6 +240,17 @@ export class Game {
         this.isRunning = true;
         this.isGameOver = false;
         this.lastTime = performance.now();
+        
+        // Start playing background music if available
+        if (this.sounds && this.sounds.backgroundMusic) {
+            try {
+                this.sounds.backgroundMusic.currentTime = 0; // Start from beginning
+                this.sounds.backgroundMusic.play().catch(e => console.warn('Could not play background music', e));
+            } catch (e) {
+                console.warn('Could not play background music', e);
+            }
+        }
+        
         this.gameLoop();
     }
     
@@ -239,6 +259,16 @@ export class Game {
      */
     stop() {
         this.isRunning = false;
+        
+        // Pause background music when game stops
+        if (this.sounds && this.sounds.backgroundMusic) {
+            try {
+                this.sounds.backgroundMusic.pause();
+            } catch (e) {
+                console.warn('Error pausing background music', e);
+            }
+        }
+        
         cancelAnimationFrame(this.animationFrameId);
     }
     
@@ -746,6 +776,17 @@ export class Game {
         // Start the game loop again
         this.isRunning = true;
         this.lastTime = performance.now();
+        
+        // Start playing background music if available
+        if (this.sounds && this.sounds.backgroundMusic) {
+            try {
+                this.sounds.backgroundMusic.currentTime = 0; // Start from beginning
+                this.sounds.backgroundMusic.play().catch(e => console.warn('Could not play background music', e));
+            } catch (e) {
+                console.warn('Could not play background music', e);
+            }
+        }
+        
         this.gameLoop();
         
         console.log('Game restarted');
@@ -2001,6 +2042,11 @@ export class Game {
                     sound.muted = muted;
                 }
             });
+            
+            // If unmuting and the game is running, make sure background music is playing
+            if (!muted && this.isRunning && !this.isGameOver && this.sounds.backgroundMusic && this.sounds.backgroundMusic.paused) {
+                this.sounds.backgroundMusic.play().catch(e => console.warn('Could not resume background music', e));
+            }
         }
     }
     
@@ -2018,6 +2064,16 @@ export class Game {
     resumeGame() {
         this.isRunning = true;
         this.lastTime = performance.now();
+        
+        // Resume background music if it's not muted
+        if (this.sounds && this.sounds.backgroundMusic && !this.sounds.backgroundMusic.muted) {
+            try {
+                this.sounds.backgroundMusic.play().catch(e => console.warn('Could not resume background music', e));
+            } catch (e) {
+                console.warn('Error resuming background music', e);
+            }
+        }
+        
         this.gameLoop();
     }
     
