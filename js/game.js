@@ -646,6 +646,56 @@ export class Game {
             return;
         }
 
+        // Check if a fetch is already in progress to avoid duplicate requests
+        if (this.isFetchingUserData) {
+            console.log('Already fetching user data, skipping duplicate request');
+            return;
+        }
+        
+        // Set flag to indicate a fetch is in progress
+        this.isFetchingUserData = true;
+        
+        // Initialize global cache if it doesn't exist
+        if (!window.userDataCache) {
+            window.userDataCache = {
+                data: {},
+                timestamp: {},
+                maxAge: 120000, // 2 minutes in milliseconds
+                
+                get(userId) {
+                    const data = this.data[userId];
+                    const timestamp = this.timestamp[userId] || 0;
+                    
+                    // Check if cache is still valid
+                    if (data && (Date.now() - timestamp) < this.maxAge) {
+                        console.log('Using cached user data', data);
+                        return data;
+                    }
+                    
+                    return null;
+                },
+                
+                set(userId, data) {
+                    this.data[userId] = data;
+                    this.timestamp[userId] = Date.now();
+                },
+                
+                clear(userId) {
+                    delete this.data[userId];
+                    delete this.timestamp[userId];
+                }
+            };
+        }
+        
+        // Check if we have valid cached data first
+        const cachedData = window.userDataCache.get(userId);
+        if (cachedData) {
+            console.log('Using cached user data for game initialization');
+            this.updateGameMetrics(cachedData);
+            this.isFetchingUserData = false;
+            return;
+        }
+
         // Try using the global refreshUserScore function first if available
         if (window.refreshUserScore) {
             console.log('Using refreshUserScore for game initialization');
@@ -654,14 +704,23 @@ export class Game {
                     if (userData) {
                         console.log('User data refreshed successfully via refreshUserScore:', userData);
                         this.updateGameMetrics(userData);
+                        
+                        // Cache the result
+                        window.userDataCache.set(userId, userData);
                     } else {
                         console.log('No data from refreshUserScore, falling back to cached data');
                         this.fallbackToCache(userId);
                     }
+                    
+                    // Reset the fetch flag
+                    this.isFetchingUserData = false;
                 })
                 .catch(error => {
                     console.error('Error with refreshUserScore:', error);
                     this.fallbackToCache(userId);
+                    
+                    // Reset the fetch flag
+                    this.isFetchingUserData = false;
                 });
         } else {
             this.fallbackToCache(userId);
@@ -673,23 +732,30 @@ export class Game {
      * @param {string} userId - User ID to fetch data for
      */
     fallbackToCache(userId) {
-        // Check if we have cached data
+        // Check if we have cached data again (in case it was set while waiting)
         const cachedData = window.userDataCache?.get(userId);
         if (cachedData) {
-            console.log('Using cached user data for game');
+            console.log('Using cached user data from fallback');
             this.updateGameMetrics(cachedData);
+            this.isFetchingUserData = false;
             return;
         }
         
-        // Fetch high score from backend
+        // Fetch high score from backend with cache control headers
         try {
+            const abortController = new AbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), 5000); // 5 second timeout
+            
             fetch(`${config.apiEndpoint}/user/${userId}`, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json'
-                }
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache'
+                },
+                signal: abortController.signal
             })
             .then(response => {
+                clearTimeout(timeoutId);
                 if (!response.ok) {
                     throw new Error('Failed to fetch user data');
                 }
@@ -699,17 +765,26 @@ export class Game {
                 console.log('User data fetched:', data);
                 this.updateGameMetrics(data);
                 
-                // Cache the data if the cache exists
+                // Cache the data
                 if (window.userDataCache) {
                     window.userDataCache.set(userId, data);
                 }
+                
+                // Reset the fetch flag
+                this.isFetchingUserData = false;
             })
             .catch(error => {
                 console.error('Failed to fetch user data:', error);
                 // If fetch fails, we will use the local high score
+                
+                // Reset the fetch flag
+                this.isFetchingUserData = false;
             });
         } catch (error) {
             console.error('Error setting up fetch request:', error);
+            
+            // Reset the fetch flag
+            this.isFetchingUserData = false;
         }
     }
     

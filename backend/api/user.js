@@ -2,6 +2,16 @@ const express = require('express');
 const router = express.Router();
 const { account, databases, DATABASE_ID, USERS_COLLECTION_ID } = require('../config/appwrite');
 const { verifyToken } = require('../middleware/auth');
+const LRU = require('lru-cache');
+
+// Create an in-memory cache for user data
+// 200 users max, items expire after 5 minutes
+const userCache = new LRU({
+  max: 200,
+  ttl: 5 * 60 * 1000, // 5 minutes
+  allowStale: true,   // Return stale items before removing
+  updateAgeOnGet: true, // Update age when getting an item
+});
 
 /**
  * Helper function to format timestamp into a readable date string
@@ -9,25 +19,20 @@ const { verifyToken } = require('../middleware/auth');
 function formatTimestamp(timestamp) {
   if (!timestamp) return null;
   
-  let date;
-  if (typeof timestamp === 'string') {
-    // ISO string format
-    date = new Date(timestamp);
-  } else {
-    // If it's already a Date object or timestamp in milliseconds
-    date = new Date(timestamp);
+  try {
+    if (typeof timestamp === 'string') {
+      return timestamp;
+    }
+    
+    if (timestamp instanceof Date) {
+      return timestamp.toISOString();
+    }
+    
+    return new Date(timestamp).toISOString();
+  } catch (e) {
+    console.error('Error formatting timestamp:', e);
+    return null;
   }
-  
-  if (isNaN(date.getTime())) return null;
-  
-  return date.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
 }
 
 /**
@@ -38,23 +43,33 @@ function formatTimestamp(timestamp) {
 router.get('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const { skipCache } = req.query;
     
-    // Get user data from Appwrite
-    const user = await account.get(userId);
+    // Check for valid userId
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
     
-    // Get additional user data from Appwrite Database
-    const userDoc = await databases.getDocument(
+    // Check cache first unless skipCache is specified
+    if (skipCache !== 'true' && userCache.has(userId)) {
+      const cachedUser = userCache.get(userId);
+      console.log(`Using cached data for user ${userId}`);
+      return res.status(200).json(cachedUser);
+    }
+    
+    // If not in cache, get from database
+    const user = await databases.getDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
       userId
     );
     
-    if (!userDoc) {
-      return res.status(404).json({ message: 'User not found in database' });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
     
     // Get user rank if stored, or calculate it if not available
-    let userRank = userDoc.rank;
+    let userRank = user.rank;
     
     if (userRank === undefined) {
       // Get all users sorted by highScore in descending order for rank calculation
@@ -95,29 +110,35 @@ router.get('/:userId', async (req, res) => {
       );
     }
     
-    res.status(200).json({
+    // Process user data
+    const userData = {
       uid: user.$id,
       email: user.email,
-      displayName: user.name || userDoc.username,
-      username: userDoc.username,
-      score: userDoc.score || userDoc.highScore || 0,
-      highScore: userDoc.highScore || 0,
-      lastGameScore: userDoc.lastGameScore || 0,
-      gamesPlayed: userDoc.gamesPlayed || 0,
-      rank: userRank || 999, // Default to a high rank if calculation failed
-      referralCount: userDoc.referralCount || 0, // Include referral count
-      referralBonus: userDoc.referralBonus || 0, // Include referral bonus points
-      createdAt: formatTimestamp(userDoc.createdAt)
-    });
+      username: user.username,
+      displayName: user.name || user.username,
+      score: user.score || user.highScore || 0,
+      highScore: user.highScore || 0,
+      lastGameScore: user.lastGameScore || 0,
+      gamesPlayed: user.gamesPlayed || 0,
+      rank: userRank || 999,
+      referralCount: user.referralCount || 0,
+      referralBonus: user.referralBonus || 0,
+      createdAt: formatTimestamp(user.createdAt),
+      updatedAt: formatTimestamp(user.updatedAt)
+    };
     
+    // Store in cache for future requests
+    userCache.set(userId, userData);
+    
+    res.status(200).json(userData);
   } catch (error) {
-    console.error('Error getting user data:', error);
-    
-    if (error.type === 'user_not_found') {
+    // Handle document not found separately
+    if (error.type === 'document_not_found') {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    res.status(500).json({ message: 'Error retrieving user data', error: error.message });
+    console.error('Error fetching user:', error);
+    res.status(500).json({ message: 'Error fetching user', error: error.message });
   }
 });
 
@@ -177,6 +198,23 @@ router.put('/:userId', verifyToken, async (req, res) => {
       userId
     );
     
+    // Update cache
+    userCache.set(userId, {
+      uid: user.$id,
+      email: user.email,
+      username: user.username,
+      displayName: user.name || userDoc.username,
+      score: userDoc.score || userDoc.highScore || 0,
+      highScore: userDoc.highScore || 0,
+      lastGameScore: userDoc.lastGameScore || 0,
+      gamesPlayed: userDoc.gamesPlayed || 0,
+      rank: userDoc.rank || 999,
+      referralCount: userDoc.referralCount || 0,
+      referralBonus: userDoc.referralBonus || 0,
+      createdAt: formatTimestamp(userDoc.createdAt),
+      updatedAt: formatTimestamp(userDoc.updatedAt)
+    });
+    
     res.status(200).json({
       message: 'User updated successfully',
       user: {
@@ -188,21 +226,45 @@ router.put('/:userId', verifyToken, async (req, res) => {
         highScore: userDoc.highScore || 0,
         lastGameScore: userDoc.lastGameScore || 0,
         gamesPlayed: userDoc.gamesPlayed || 0,
+        rank: userDoc.rank || 999,
         referralCount: userDoc.referralCount || 0,
         referralBonus: userDoc.referralBonus || 0,
-        createdAt: formatTimestamp(userDoc.createdAt)
+        createdAt: formatTimestamp(userDoc.createdAt),
+        updatedAt: formatTimestamp(userDoc.updatedAt)
       }
     });
     
   } catch (error) {
     console.error('Error updating user:', error);
     
-    if (error.type === 'user_not_found') {
+    if (error.type === 'document_not_found') {
       return res.status(404).json({ message: 'User not found' });
     }
     
     res.status(500).json({ message: 'Error updating user', error: error.message });
   }
+});
+
+/**
+ * @route DELETE /api/user/:userId/cache
+ * @desc Clear the cache for a specific user
+ * @access Public
+ */
+router.delete('/:userId/cache', (req, res) => {
+  const { userId } = req.params;
+  
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required' });
+  }
+  
+  // Clear cache for this user
+  const existed = userCache.has(userId);
+  userCache.delete(userId);
+  
+  res.status(200).json({ 
+    message: existed ? 'Cache cleared for user' : 'No cache entry found for user',
+    userId
+  });
 });
 
 module.exports = router; 

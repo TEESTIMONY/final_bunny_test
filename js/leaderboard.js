@@ -16,11 +16,13 @@ const databases = new Appwrite.Databases(client);
 const account = new Appwrite.Account(client);
 const Query = Appwrite.Query; // Import Query from Appwrite
 
-// Cache for leaderboard data with 5-minute expiration
+// Enhanced cache system for leaderboard data with longer expiration
 const leaderboardCache = {
     data: null,
     timestamp: 0,
-    expirationTime: 5 * 60 * 1000, // 5 minutes
+    expirationTime: 10 * 60 * 1000, // 10 minutes (doubled from 5)
+    pendingUpdate: null, // Used to track in-progress updates 
+    lastUpdateAttempt: 0, // Throttle update attempts
 
     get() {
         if (this.data && Date.now() - this.timestamp < this.expirationTime) {
@@ -35,17 +37,55 @@ const leaderboardCache = {
     },
 
     async update() {
+        // Prevent multiple simultaneous updates and throttle update frequency to once per minute
+        if (
+            this.pendingUpdate || 
+            (Date.now() - this.lastUpdateAttempt < 60000)
+        ) {
+            return this.pendingUpdate || Promise.resolve(this.get());
+        }
+
         try {
-            const freshData = await fetchLeaderboardData(true);
+            this.lastUpdateAttempt = Date.now();
+            this.pendingUpdate = fetchLeaderboardData(true);
+            const freshData = await this.pendingUpdate;
+            
             if (freshData) {
                 this.set(freshData);
                 return freshData;
             }
-            return null;
+            return this.get(); // Return existing data as fallback
         } catch (error) {
             console.error('Error updating leaderboard cache:', error);
+            return this.get(); // Return existing data as fallback 
+        } finally {
+            this.pendingUpdate = null;
+        }
+    }
+};
+
+// User data cache for profile information
+const userProfileCache = {
+    data: new Map(),
+    maxAge: 5 * 60 * 1000, // 5 minutes
+    
+    get(userId) {
+        const entry = this.data.get(userId);
+        if (!entry || (Date.now() - entry.timestamp > this.maxAge)) {
             return null;
         }
+        return entry.data;
+    },
+    
+    set(userId, data) {
+        this.data.set(userId, {
+            data,
+            timestamp: Date.now()
+        });
+    },
+    
+    clear(userId) {
+        this.data.delete(userId);
     }
 };
 
@@ -55,8 +95,27 @@ window.leaderboardCache = leaderboardCache;
 // Also expose the fetchLeaderboardData function globally
 window.fetchLeaderboardData = fetchLeaderboardData;
 
-// Start background updates
-setInterval(() => leaderboardCache.update(), 30 * 1000);
+// Start background updates every 30 seconds if active on page
+let updateIntervalId = null;
+
+// Helper function to start/stop background updates
+function manageBackgroundUpdates() {
+    // Clear any existing interval
+    if (updateIntervalId) {
+        clearInterval(updateIntervalId);
+    }
+    
+    // Start a new interval only if the page is visible
+    if (document.visibilityState === 'visible') {
+        updateIntervalId = setInterval(() => leaderboardCache.update(), 30 * 1000);
+    }
+}
+
+// Listen for visibility changes
+document.addEventListener('visibilitychange', manageBackgroundUpdates);
+
+// Initial setup of background updates
+manageBackgroundUpdates();
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize the leaderboard
@@ -84,14 +143,22 @@ function initLeaderboard() {
     // Set up animations for particles
     setupParticleAnimations();
     
-    // Load and display user info at the top bar
-    loadUserInfo();
-    
-    // Load leaderboard data
-    loadLeaderboardData();
-    
-    // Load player's own stats
-    loadPlayerStats();
+    // Load everything in parallel for better performance
+    Promise.all([
+        // Load and display user info at the top bar
+        loadUserInfo(),
+        
+        // Load leaderboard data
+        loadLeaderboardData()
+    ])
+    .then(() => {
+        // After both operations are complete, load player stats
+        // (which relies on both user info and leaderboard data)
+        return loadPlayerStats();
+    })
+    .catch(error => {
+        console.error('Error initializing leaderboard:', error);
+    });
 }
 
 /**
@@ -312,7 +379,7 @@ function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-// Modified fetchLeaderboardData to use Appwrite
+// Modified fetchLeaderboardData to use Appwrite with optimized reads
 async function fetchLeaderboardData(bypassCache = false) {
     // Check cache first if not bypassing
     if (!bypassCache) {
@@ -328,10 +395,11 @@ async function fetchLeaderboardData(bypassCache = false) {
     try {
         console.log('Fetching leaderboard data from Appwrite...');
         
-        // Create Appwrite queries
+        // Create Appwrite queries - only fetch fields we need
         const queries = [
             Query.orderDesc('score'), // Sort by score descending
-            Query.limit(100) // Limit to 100 users
+            Query.limit(100), // Limit to 100 users
+            Query.select(['$id', 'username', 'displayName', 'score', 'highScore', 'gamesPlayed']) // Only select fields we need
         ];
         
         // Fetch users directly from Appwrite
@@ -340,8 +408,6 @@ async function fetchLeaderboardData(bypassCache = false) {
             config.usersCollectionId,
             queries
         );
-        
-        console.log('Appwrite response:', response);
         
         if (!response || !response.documents) {
             throw new Error('Invalid response from Appwrite');
@@ -355,7 +421,7 @@ async function fetchLeaderboardData(bypassCache = false) {
             gamesPlayed: parseInt(user.gamesPlayed || 0)
         }));
         
-        // Sort by score in descending order (even though Appwrite should already do this)
+        // Sort by score in descending order
         formattedData.sort((a, b) => b.score - a.score);
         
         // Cache the formatted data
@@ -369,10 +435,11 @@ async function fetchLeaderboardData(bypassCache = false) {
         // Try the API endpoint as fallback
         try {
             console.log('Falling back to API endpoint...');
-            const response = await fetch(`${config.apiEndpoint}/users?sortBy=score&sortDir=desc&limit=100`, {
+            const response = await fetch(`${config.apiEndpoint}/users?sortBy=score&sortDir=desc&limit=100&fields=uid,username,displayName,score,highScore,gamesPlayed`, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'max-age=300' // Allow CDN/browser caching for 5 minutes
                 }
             });
             
@@ -403,7 +470,8 @@ async function fetchLeaderboardData(bypassCache = false) {
             return formattedData;
         } catch (apiError) {
             console.error('All fetch attempts failed:', apiError);
-            return null;
+            // Return existing cache data as fallback, even if expired
+            return leaderboardCache.get() || null;
         }
     }
 }
@@ -412,22 +480,12 @@ async function fetchLeaderboardData(bypassCache = false) {
  * Load and display user information on the top bar
  */
 function loadUserInfo() {
-    // Try to refresh user score using the global function
-    if (window.refreshUserScore) {
-        console.log('Refreshing user score data to get latest values');
-        window.refreshUserScore().then(userData => {
-            console.log('User score refreshed:', userData);
-        }).catch(error => {
-            console.error('Error refreshing user score:', error);
-        });
-    }
-
     // Get user info from localStorage or sessionStorage
     let username = localStorage.getItem('username') || sessionStorage.getItem('username');
     const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
     const score = localStorage.getItem('highScore') || sessionStorage.getItem('highScore') || 0;
     
-    // Update the UI elements
+    // Update the UI elements with stored data immediately
     const currentUsernameElement = document.getElementById('currentUsername');
     const currentUserScoreElement = document.getElementById('currentUserScore');
     
@@ -438,99 +496,61 @@ function loadUserInfo() {
         // Temporarily set username to email prefix or stored username
         currentUsernameElement.textContent = isEmail ? username.split('@')[0] : username;
         currentUserScoreElement.textContent = formatNumber(score);
-        
-        // If we have a userId, try to fetch the latest data including proper username
-        if (userId) {
-            // First try to clear cache for this user to get fresh data
-            if (window.userDataCache) {
-                window.userDataCache.clear(userId);
-            }
-
-            // Try to fetch using Appwrite SDK directly
-            try {
-                databases.getDocument(config.databaseId, config.usersCollectionId, userId)
-                    .then(user => {
-                        console.log('User data fetched from Appwrite for header:', user);
-                        
-                        // Use the proper display name or username from Appwrite
-                        if (user.displayName || user.username) {
-                            const properUsername = user.displayName || user.username;
-                            console.log('Using proper username from Appwrite:', properUsername);
-                            currentUsernameElement.textContent = properUsername;
-                            
-                            // Update localStorage and sessionStorage with the proper username
-                            localStorage.setItem('username', properUsername);
-                            sessionStorage.setItem('username', properUsername);
-                        }
-                        
-                        // Update score if available
-                        if (user.score || user.highScore) {
-                            const highestScore = Math.max(user.score || 0, user.highScore || 0);
-                            currentUserScoreElement.textContent = formatNumber(highestScore);
-                            localStorage.setItem('highScore', highestScore);
-                            sessionStorage.setItem('highScore', highestScore);
-                        }
-                    })
-                    .catch(error => {
-                        console.warn('Appwrite fetch failed, falling back to API:', error);
-                        
-                        // Fall back to API endpoint if Appwrite SDK fails
-                        fetch(`${config.apiEndpoint}/user/${userId}`, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json'
-                            }
-                        })
-                        .then(response => {
-                            if (!response.ok) throw new Error('Failed to fetch user data');
-                            return response.json();
-                        })
-                        .then(data => {
-                            console.log('User data fetched via API for header:', data);
-                            
-                            // Use the proper display name or username from the API
-                            if (data.displayName || data.username) {
-                                const properUsername = data.displayName || data.username;
-                                console.log('Using proper username from API:', properUsername);
-                                currentUsernameElement.textContent = properUsername;
-                                
-                                // Update localStorage and sessionStorage with the proper username
-                                localStorage.setItem('username', properUsername);
-                                sessionStorage.setItem('username', properUsername);
-                            }
-                            
-                            // Update score if available
-                            if (data.score || data.highScore) {
-                                const highestScore = Math.max(data.score || 0, data.highScore || 0);
-                                currentUserScoreElement.textContent = formatNumber(highestScore);
-                                localStorage.setItem('highScore', highestScore);
-                                sessionStorage.setItem('highScore', highestScore);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching user data for header:', error);
-                            // Keep using the default username if API fetch fails
-                        });
-                    });
-            } catch (error) {
-                console.error('Error setting up Appwrite fetch:', error);
-                // Keep using the default username if Appwrite setup fails
-            }
-        }
-    } else {
-        // If no username found, use a placeholder
-        currentUsernameElement.textContent = "Guest Player";
-        currentUserScoreElement.textContent = "0";
-        
-        // Create a random guest username for demo purposes
-        const guestNames = ["Hopper", "JumpMaster", "BunnyFan", "SkipJoy", "LeapFrog"];
-        const randomName = guestNames[Math.floor(Math.random() * guestNames.length)];
-        currentUsernameElement.textContent = `Guest_${randomName}`;
-        
-        // Log authentication status
-        console.log('No user authenticated, using guest mode');
     }
+    
+    // If user is not logged in, stop here
+    if (!userId) {
+        return Promise.resolve();
+    }
+    
+    // Check if we have cached user data
+    const cachedUser = userProfileCache.get(userId);
+    if (cachedUser) {
+        // Update UI with cached data
+        currentUsernameElement.textContent = cachedUser.displayName || cachedUser.username || username;
+        currentUserScoreElement.textContent = formatNumber(cachedUser.score || cachedUser.highScore || score);
+        return Promise.resolve(cachedUser);
+    }
+    
+    // If refreshUserScore function is available, use it to refresh data in the background
+    if (window.refreshUserScore) {
+        // Don't wait for this to complete
+        window.refreshUserScore().catch(err => console.error('Error refreshing user score:', err));
+    }
+    
+    // Fetch user data from Appwrite in the background
+    return databases.getDocument(config.databaseId, config.usersCollectionId, userId)
+        .then(user => {
+            // Cache the user data
+            userProfileCache.set(userId, user);
+            
+            // Update UI with fresh data
+            if (user.displayName || user.username) {
+                const properUsername = user.displayName || user.username;
+                currentUsernameElement.textContent = properUsername;
+                
+                // Update storage
+                localStorage.setItem('username', properUsername);
+                sessionStorage.setItem('username', properUsername);
+            }
+            
+            // Update score in UI
+            if (user.score || user.highScore) {
+                const displayScore = Math.max(user.score || 0, user.highScore || 0);
+                currentUserScoreElement.textContent = formatNumber(displayScore);
+                
+                // Update storage
+                localStorage.setItem('highScore', displayScore);
+                sessionStorage.setItem('highScore', displayScore);
+            }
+            
+            return user;
+        })
+        .catch(error => {
+            console.warn('Error fetching user data:', error);
+            // Don't block the UI if this fails
+            return null;
+        });
 }
 
 /**

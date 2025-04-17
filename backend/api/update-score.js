@@ -7,6 +7,106 @@ const { verifyToken } = require('../middleware/auth');
 // This is a quick fix - in production you would use a persistent store
 const processedReferrals = new Set();
 
+// In-memory cache for top player ranks
+// Will be updated periodically by a batch job
+const rankCache = {
+  topPlayers: [], // Stores ordered list of top players by highScore
+  lastUpdated: 0,
+  updating: false
+};
+
+// Update rank cache every 10 minutes
+const RANK_CACHE_TTL = 10 * 60 * 1000; 
+
+/**
+ * Updates the rank cache with latest rankings
+ * This prevents recalculating ranks on every score update
+ */
+async function updateRankCache() {
+  if (rankCache.updating) return;
+  
+  try {
+    rankCache.updating = true;
+    console.log('[RANK CACHE] Updating rank cache');
+    
+    // Get all users sorted by highScore in descending order
+    const usersResponse = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        'orderDesc("highScore")'
+      ]
+    );
+    
+    // Process the rankings
+    const rankedPlayers = [];
+    let lastHighScore = Infinity;
+    let currentRank = 0;
+    
+    usersResponse.documents.forEach(user => {
+      const highScore = user.highScore || 0;
+      
+      // If this is a new score tier, increment the rank
+      if (highScore < lastHighScore) {
+        currentRank++;
+        lastHighScore = highScore;
+      }
+      
+      rankedPlayers.push({
+        id: user.$id,
+        highScore: highScore,
+        rank: currentRank
+      });
+    });
+    
+    // Update the cache
+    rankCache.topPlayers = rankedPlayers;
+    rankCache.lastUpdated = Date.now();
+    
+    console.log(`[RANK CACHE] Updated with ${rankedPlayers.length} players`);
+  } catch (error) {
+    console.error('[RANK CACHE] Error updating rank cache:', error);
+  } finally {
+    rankCache.updating = false;
+  }
+}
+
+// Initial population of rank cache
+updateRankCache();
+
+/**
+ * Gets a user's rank from the cache or calculates it if needed
+ * @param {string} userId - The user ID to look up
+ * @param {number} highScore - The user's current high score
+ * @returns {number} The calculated rank
+ */
+function getRankFromCache(userId, highScore) {
+  // Check if cache needs update
+  if (Date.now() - rankCache.lastUpdated > RANK_CACHE_TTL && !rankCache.updating) {
+    // Trigger update in background
+    updateRankCache();
+  }
+  
+  // Try to find user in cache
+  const cachedUser = rankCache.topPlayers.find(player => player.id === userId);
+  if (cachedUser) {
+    return cachedUser.rank;
+  }
+  
+  // If user not in cache or score higher than cached, calculate rough rank
+  // This is an estimate until the next cache refresh
+  let estimatedRank = rankCache.topPlayers.length + 1; // Default to bottom
+  
+  for (let i = 0; i < rankCache.topPlayers.length; i++) {
+    if (highScore >= rankCache.topPlayers[i].highScore) {
+      estimatedRank = rankCache.topPlayers[i].rank;
+      break;
+    }
+  }
+  
+  return estimatedRank;
+}
+
 /**
  * @route POST /api/update-score
  * @desc Update user's score
@@ -138,7 +238,10 @@ router.post('/', async (req, res) => {
       // Keep track of highest single-game score
       const highestSingleScore = Math.max(numericScore, currentHighScore);
       
-      // Update the user document
+      // Get estimated rank from cache instead of reading all users
+      const userRank = getRankFromCache(userId, highestSingleScore);
+      
+      // Update the user document with all fields at once
       await databases.updateDocument(
         DATABASE_ID,
         USERS_COLLECTION_ID,
@@ -148,44 +251,9 @@ router.post('/', async (req, res) => {
           highScore: highestSingleScore,
           lastGameScore: numericScore,
           gamesPlayed: (userDoc.gamesPlayed || 0) + 1,
+          rank: userRank,
           updatedAt: new Date().toISOString()
         }
-      );
-
-      // Calculate user's rank after updating score
-      // Get all users sorted by highScore in descending order
-      const usersResponse = await databases.listDocuments(
-        DATABASE_ID,
-        USERS_COLLECTION_ID,
-        [
-          'orderDesc("highScore")'
-        ]
-      );
-      
-      let userRank = 0;
-      let lastHighScore = Infinity;
-      let currentRank = 0;
-      
-      // Iterate through users to determine rank
-      usersResponse.documents.forEach(user => {
-        // If this is a new score tier, increment the rank
-        if (user.highScore < lastHighScore) {
-          currentRank++;
-          lastHighScore = user.highScore;
-        }
-        
-        // If this is our user, save their rank
-        if (user.$id === userId) {
-          userRank = currentRank;
-        }
-      });
-      
-      // Update the user's rank in database
-      await databases.updateDocument(
-        DATABASE_ID,
-        USERS_COLLECTION_ID,
-        userId,
-        { rank: userRank }
       );
       
       console.log(`User ${userId} score updated: +${numericScore} points (total: ${newCumulativeScore}), rank: ${userRank}`);

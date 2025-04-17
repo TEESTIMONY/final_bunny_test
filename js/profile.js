@@ -32,6 +32,67 @@ const highScore = document.getElementById('highScore');
 const playerRank = document.getElementById('playerRank');
 const achievementsList = document.getElementById('achievementsList');
 
+// Improved data caching system with TTL
+const userProfileCache = {
+  data: new Map(),
+  referralCounts: new Map(),
+  maxAge: 5 * 60 * 1000, // 5 minutes in milliseconds
+  
+  // Get profile data from cache, returns null if expired or not available
+  getUserProfile(userId) {
+    const entry = this.data.get(userId);
+    if (!entry) return null;
+    
+    // Check if cache entry is expired
+    if (Date.now() - entry.timestamp > this.maxAge) {
+      console.log('Cache expired for user:', userId);
+      this.data.delete(userId);
+      return null;
+    }
+    
+    console.log('Using cached profile data for user:', userId);
+    return entry.data;
+  },
+  
+  // Save profile data to cache
+  setUserProfile(userId, data) {
+    this.data.set(userId, {
+      data,
+      timestamp: Date.now()
+    });
+    console.log('Updated cache for user:', userId);
+  },
+  
+  // Get referral count from cache
+  getReferralCount(userId) {
+    const entry = this.referralCounts.get(userId);
+    if (!entry) return null;
+    
+    // Check if cache entry is expired
+    if (Date.now() - entry.timestamp > this.maxAge) {
+      this.referralCounts.delete(userId);
+      return null;
+    }
+    
+    return entry.count;
+  },
+  
+  // Save referral count to cache
+  setReferralCount(userId, count) {
+    this.referralCounts.set(userId, {
+      count,
+      timestamp: Date.now()
+    });
+  },
+  
+  // Clear all caches for a specific user
+  clearUserCache(userId) {
+    this.data.delete(userId);
+    this.referralCounts.delete(userId);
+    console.log('Cleared cache for user:', userId);
+  }
+};
+
 document.addEventListener('DOMContentLoaded', async function() {
     // Initialize profile
     await initProfile();
@@ -60,40 +121,30 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function initProfile() {
     console.log('Initializing profile page');
     
-    // Force refresh user data to clear cache first
+    // Get current user ID
     const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
-    if (userId && window.userDataCache) {
-        console.log('Clearing user data cache for profile page');
+    if (!userId) {
+      console.error('No user ID found in storage');
+      showError('User not logged in');
+      return;
+    }
+    
+    // Clear user cache to ensure fresh data on profile page load
+    userProfileCache.clearUserCache(userId);
+    
+    // If the global user data cache exists, also clear it
+    if (window.userDataCache) {
+        console.log('Clearing global user data cache for profile page');
         window.userDataCache.clear(userId);
-        
-        // If refreshUserScore is available, use it to get fresh data
-        if (window.refreshUserScore) {
-            try {
-                await window.refreshUserScore();
-                console.log('User score refreshed on profile page load');
-            } catch (error) {
-                console.error('Error refreshing user score on profile load:', error);
-            }
-        }
-        
-        // Fetch the referral count directly from the database
+    }
+    
+    // If refreshUserScore is available, use it to get fresh data
+    if (window.refreshUserScore) {
         try {
-            console.log('Fetching referral count from database');
-            const userDoc = await databases.getDocument(
-                config.databaseId,
-                config.usersCollectionId,
-                userId
-            );
-            
-            // Update localStorage with the latest referral count
-            if (userDoc && userDoc.referralCount !== undefined) {
-                const referralCount = parseInt(userDoc.referralCount || 0);
-                console.log('Referral count from database:', referralCount);
-                localStorage.setItem('referralCount', referralCount.toString());
-                sessionStorage.setItem('referralCount', referralCount.toString());
-            }
+            await window.refreshUserScore();
+            console.log('User score refreshed on profile page load');
         } catch (error) {
-            console.error('Error fetching referral count:', error);
+            console.error('Error refreshing user score on profile load:', error);
         }
     }
     
@@ -193,129 +244,126 @@ function updateUserInfoFromAppwrite() {
         return;
     }
     
+    // Use User ID from local storage
+    const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+    if (!userId) {
+        console.error('User ID not found in storage');
+        return;
+    }
+    
+    // Check if we have cached data
+    const cachedUserData = userProfileCache.getUserProfile(userId);
+    if (cachedUserData) {
+        // Update UI with cached data
+        userNameElement.textContent = cachedUserData.displayName || cachedUserData.username || 'Player';
+        userScoreElement.textContent = formatNumber(cachedUserData.score || 0);
+        return;
+    }
+    
     // First try to use the refreshUserScore global function if available
     if (window.refreshUserScore) {
         console.log('Using refreshUserScore to get latest user data');
         window.refreshUserScore()
             .then(userData => {
                 if (userData) {
-                    console.log('User data refreshed successfully:', userData);
-                    // The refreshUserScore function should already update the score display
-                    return;
+                    // Update UI with the data
+                    userNameElement.textContent = userData.displayName || userData.username || 'Player';
+                    userScoreElement.textContent = formatNumber(userData.score || 0);
+                    
+                    // Cache the data for future use
+                    userProfileCache.setUserProfile(userId, userData);
                 } else {
-                    // If no data was returned, fall back to the original method
-                    console.log('No data from refreshUserScore, falling back to standard method');
+                    // If no data, fall back to direct Appwrite call
                     fetchUserDataWithAppwrite();
                 }
             })
             .catch(error => {
                 console.error('Error with refreshUserScore:', error);
-                // Fall back to the original method
                 fetchUserDataWithAppwrite();
             });
     } else {
-        // Fall back to the original method if refreshUserScore is not available
+        // No refreshUserScore function, use direct Appwrite call
         fetchUserDataWithAppwrite();
     }
     
-    // Helper function to fetch user data with Appwrite
     function fetchUserDataWithAppwrite() {
-    // Try to get current user from Appwrite
-    account.get()
-        .then(user => {
-            console.log('User data fetched from Appwrite:', user);
+        // Try to get user data directly from Appwrite
+        databases.getDocument(
+            config.databaseId,
+            config.usersCollectionId,
+            userId
+        ).then(userData => {
+            // Update UI with the data
+            userNameElement.textContent = userData.displayName || userData.username || 'Player';
+            userScoreElement.textContent = formatNumber(userData.score || 0);
             
-            // Update username in the header
-            if (user.name) {
-                userNameElement.textContent = user.name;
-                // Also update in storage for other pages
-                localStorage.setItem('username', user.name);
-                sessionStorage.setItem('username', user.name);
-            }
-            
-                // Fetch the user document to get the score - with no-cache headers
-                console.log('Fetching fresh user document from Appwrite');
-                
-                // First clear any cached data
-                if (window.userDataCache) {
-                    window.userDataCache.clear(user.$id);
-                }
-                
-                // Then fetch the document
-            return databases.getDocument(
-                config.databaseId,
-                config.usersCollectionId,
-                user.$id
-            );
-        })
-        .then(userDoc => {
-            console.log('User document fetched from Appwrite:', userDoc);
-            
-            // Update score in the header
-            const score = userDoc.score || userDoc.highScore || 0;
-            userScoreElement.textContent = formatNumber(score);
-            
-            // Also update in storage for other pages
-            localStorage.setItem('score', score.toString());
-            sessionStorage.setItem('score', score.toString());
-            
-            // Update highScore if available
-            if (userDoc.highScore) {
-                localStorage.setItem('highScore', userDoc.highScore.toString());
-                sessionStorage.setItem('highScore', userDoc.highScore.toString());
-            }
-        })
-        .catch(error => {
+            // Cache the data for future use
+            userProfileCache.setUserProfile(userId, userData);
+        }).catch(error => {
             console.error('Error fetching user data from Appwrite:', error);
             
-            // Fall back to localStorage values
-            const storedUsername = localStorage.getItem('username') || sessionStorage.getItem('username');
-            const storedScore = localStorage.getItem('score') || sessionStorage.getItem('score');
-            
-            if (storedUsername) {
-                userNameElement.textContent = storedUsername;
-            }
-            
-            if (storedScore) {
-                userScoreElement.textContent = formatNumber(parseInt(storedScore));
-            }
+            // If all else fails, use data from localStorage
+            userNameElement.textContent = localStorage.getItem('username') || sessionStorage.getItem('username') || 'Player';
+            userScoreElement.textContent = formatNumber(parseInt(localStorage.getItem('totalScore')) || 0);
         });
     }
 }
 
 /**
- * Load referral statistics for the current user
- * @param {string} userId - The current user's ID
+ * Load referral stats for a user
+ * @param {string} userId - The user ID to load stats for
  */
 function loadReferralStats(userId) {
-    // Get elements to update
-    const referralsCount = document.getElementById('referrals-count');
-    const rewardsCount = document.getElementById('rewards-count');
+    // Check if we have cached referral count
+    const cachedReferralCount = userProfileCache.getReferralCount(userId);
+    if (cachedReferralCount !== null) {
+        updateReferralDisplay(cachedReferralCount);
+        return;
+    }
     
-    if (!referralsCount || !rewardsCount) return;
+    // Fetch the referral count directly from the database
+    try {
+        console.log('Fetching referral count from database');
+        databases.getDocument(
+            config.databaseId,
+            config.usersCollectionId,
+            userId
+        ).then(userDoc => {
+            // Update localStorage with the latest referral count
+            if (userDoc && userDoc.referralCount !== undefined) {
+                const referralCount = parseInt(userDoc.referralCount || 0);
+                console.log('Referral count from database:', referralCount);
+                
+                // Update localStorage and sessionStorage
+                localStorage.setItem('referralCount', referralCount.toString());
+                sessionStorage.setItem('referralCount', referralCount.toString());
+                
+                // Cache the referral count
+                userProfileCache.setReferralCount(userId, referralCount);
+                
+                // Update the display
+                updateReferralDisplay(referralCount);
+            }
+        }).catch(error => {
+            console.error('Error fetching referral count:', error);
+            // Fall back to localStorage
+            const storedCount = parseInt(localStorage.getItem('referralCount') || '0');
+            updateReferralDisplay(storedCount);
+        });
+    } catch (error) {
+        console.error('Error fetching referral count:', error);
+        // Fall back to localStorage
+        const storedCount = parseInt(localStorage.getItem('referralCount') || '0');
+        updateReferralDisplay(storedCount);
+    }
     
-    // Query Appwrite database for referral statistics
-    databases.listDocuments('referrals', [
-        Query.equal('referrerId', userId)
-    ])
-    .then(response => {
-        // Update the referrals count
-        if (referralsCount) {
-            referralsCount.textContent = response.documents.length;
+    function updateReferralDisplay(count) {
+        // Update the referral count display if the element exists
+        const referralCountElement = document.getElementById('referralCount');
+        if (referralCountElement) {
+            referralCountElement.textContent = count.toString();
         }
-        
-        // Calculate rewards (1 carrot per referral)
-        const rewards = response.documents.length;
-        if (rewardsCount) {
-            rewardsCount.textContent = rewards;
-        }
-    })
-    .catch(error => {
-        console.error('Error loading referral stats:', error);
-        // Set default values if there's an error
-        if (referralsCount) referralsCount.textContent = '0';
-        if (rewardsCount) rewardsCount.textContent = '0';
-    });
+    }
 }
 
 /**
